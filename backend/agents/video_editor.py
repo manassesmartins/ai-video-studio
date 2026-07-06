@@ -3,6 +3,7 @@ import time
 import glob
 import shutil
 import tempfile
+import random
 
 from .base import BaseAgent
 
@@ -75,7 +76,30 @@ exec {ffmpeg_bin} "${{ARGS[@]}}"
         os.chmod(wrapper_path, 0o755)
         return gpu_codec, wrapper_path
 
-    async def compose_video(self, audio_file: str, images: list, fmt: dict = None, output_filename: str = "final_video.mp4") -> str:
+    def _create_srt(self, segments, total_duration, output_path):
+        """Cria arquivo .srt a partir dos segmentos."""
+        if not segments:
+            return ""
+        dur_per_seg = total_duration / max(len(segments), 1)
+        lines = []
+        for i, seg in enumerate(segments):
+            start = i * dur_per_seg
+            end = (i + 1) * dur_per_seg
+            text = seg.get("narration", seg.get("title", ""))[:200]
+            def srt_ts(secs):
+                h = int(secs // 3600)
+                m = int((secs % 3600) // 60)
+                s = int(secs % 60)
+                ms = int((secs - int(secs)) * 1000)
+                return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
+            lines.append(f"{i+1}\n{srt_ts(start)} --> {srt_ts(end)}\n{text}\n")
+        srt_path = output_path.rsplit(".", 1)[0] + ".srt"
+        with open(srt_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines))
+        return srt_path
+
+    async def compose_video(self, audio_file: str, images: list, fmt: dict = None,
+                              output_filename: str = "final_video.mp4", segments: list = None) -> str:
         self.set_status("composing")
         self.log_action("Compondo o vídeo final...")
 
@@ -104,8 +128,12 @@ Descreva brevemente como sera a composicao do video final.
         try:
             from moviepy import (AudioFileClip, ImageClip, CompositeVideoClip, TextClip, concatenate_videoclips)
 
-            audio_clip = AudioFileClip(audio_file)
-            audio_duration = audio_clip.duration
+            if audio_file and os.path.exists(audio_file):
+                audio_clip = AudioFileClip(audio_file)
+                audio_duration = audio_clip.duration
+            else:
+                audio_clip = None
+                audio_duration = max(len(valid_images), 1) * 5  # 5s por imagem sem áudio
 
             v_fmt = (fmt or {}).get("video", {})
             a_fmt = (fmt or {}).get("audio", {})
@@ -130,7 +158,19 @@ Descreva brevemente como sera a composicao do video final.
                 img_path = img_info["local_path"]
                 credit = img_info.get("credit", "")
 
-                img_clip = ImageClip(img_path).with_duration(img_duration).resized(width=img_w, height=img_h)
+                img_clip = ImageClip(img_path).resized(width=img_w, height=img_h).with_duration(img_duration)
+
+                # Ken Burns: zoom lento
+                try:
+                    zoom = 1.0 + random.uniform(0.03, 0.12)
+                    img_clip = (img_clip
+                        .resized(lambda t: 1 + (zoom - 1) * t / max(img_duration, 0.01))
+                        .with_position(lambda t: (
+                            -((zoom - 1) * img_w * t / max(img_duration, 0.01)) / 2,
+                            -((zoom - 1) * img_h * t / max(img_duration, 0.01)) / 2
+                        )))
+                except Exception:
+                    pass
 
                 try:
                     credit_txt = TextClip(
@@ -159,7 +199,7 @@ Descreva brevemente como sera a composicao do video final.
                         img_clip,
                         title_txt,
                         credit_txt
-                    ], size=img_clip.size)
+                    ], size=(img_w, img_h))
                     clips.append(composite)
                 except Exception as e:
                     self.log_action(f"Aviso: erro ao criar overlay para imagem {i}: {e}")
@@ -174,8 +214,15 @@ Descreva brevemente como sera a composicao do video final.
                 ).with_duration(audio_duration).with_position("center")
                 clips = [CompositeVideoClip([bg, text_overlay], size=(1920, 1080))]
 
+            # Gera .srt com legendas
+            if segments:
+                srt_path = self._create_srt(segments, audio_duration, output_path)
+                if srt_path:
+                    self.log_action(f"Legendas salvas: {srt_path}")
+
             final = concatenate_videoclips(clips, method="compose")
-            final = final.with_audio(audio_clip)
+            if audio_clip:
+                final = final.with_audio(audio_clip)
             final = final.resized(width=vid_w, height=vid_h)
 
             gpu_codec, wrapper = self._gpu_codec_and_wrapper(vid_codec)
@@ -191,7 +238,7 @@ Descreva brevemente como sera a composicao do video final.
                     output_path,
                     fps=vid_fps,
                     codec=gpu_codec,
-                    audio_codec=aud_codec,
+                    audio_codec=aud_codec if audio_clip else "aac",
                     bitrate=vid_bitrate,
                     temp_audiofile=os.path.join(output_dir, f"temp_{output_filename}.m4a"),
                     remove_temp=True,
@@ -201,7 +248,8 @@ Descreva brevemente como sera a composicao do video final.
                 if wrapper:
                     fw.FFMPEG_BINARY = original_ffmpeg
 
-            audio_clip.close()
+            if audio_clip:
+                audio_clip.close()
             final.close()
 
             if os.path.exists(output_path):

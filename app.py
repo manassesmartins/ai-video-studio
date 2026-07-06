@@ -252,7 +252,7 @@ class Company:
                 if 0 <= idx < len(raw_news):
                     news_selecionadas.append(raw_news[idx])
         if not news_selecionadas:
-            news_selecionadas = raw_news[:count]
+            news_selecionadas = raw_news[:max(count, 1)]
 
         # 3. Jornalista: enriquece cada notícia selecionada (LLM) seguindo a instrução do orquestrador
         news_items = []
@@ -263,7 +263,7 @@ class Company:
                 na._report("Resumindo e detalhando cada notícia...", 20)
                 news_items = asyncio.run(na.enrich_news(news_selecionadas, instr))
                 self.api._broadcast({"type": "agent_xp", "key": "reporter", "pct": 100})
-                self.api._log(f"📚 Total de notícias únicas já usadas: {len(self._seen_news)}", "hire")
+                self.api._log(f"📚 Notícias enriquecidas: {len(news_items)}", "hire")
             except Exception as e:
                 self.api._log(f"Erro ao enriquecer notícias: {e}", "error")
 
@@ -282,19 +282,28 @@ class Company:
             except Exception as e:
                 self.api._log(f"Erro ao criar roteiro: {e}", "error")
 
+        # Fallback: se não houver segmentos, cria um segmento genérico
+        if not segments and news_items:
+            segments = [{"title": n.get("title", "Notícia"), "narration": n.get("summary", n.get("title", "")), "image_desc": n.get("title", ""), "credit": n.get("source", "")} for n in news_items]
+            self.api._log("⚠️ Usando segmentos genéricos (roteiro não gerou segmentos)", "error")
+
         # 5. Designer: busca imagens seguindo a instrução do orquestrador
         images = []
         ia = hired.get("Designer de Imagens")
         if ia and segments:
-            try:
-                instr = instrucoes.get("Designer de Imagens", "")
-                self.api._broadcast({"type": "stage_update", "stage": f"🎨 {ia.name}: buscando imagens...", "agent": ia.name})
-                ia._report("Buscando imagens para cada notícia...", 10)
-                images = asyncio.run(ia.prepare_images(segments[:len(news_items)], news_items, instr))
-                self.api._broadcast({"type": "images_prepared", "count": len(images)})
-                self.api._broadcast({"type": "agent_xp", "key": "designer", "pct": 100})
-            except Exception as e:
-                self.api._log(f"Erro ao buscar imagens: {e}", "error")
+            for attempt in range(2):
+                try:
+                    instr = instrucoes.get("Designer de Imagens", "")
+                    self.api._broadcast({"type": "stage_update", "stage": f"🎨 {ia.name}: buscando imagens...", "agent": ia.name})
+                    ia._report("Buscando imagens para cada notícia...", 10)
+                    images = asyncio.run(ia.prepare_images(segments, news_items, instr))
+                    if images:
+                        break
+                    self.api._log(f"Tentativa {attempt+1}: nenhuma imagem, tentando de novo...", "error")
+                    time.sleep(2)
+                except Exception as e:
+                    self.api._log(f"Tentativa {attempt+1}: {e}", "error")
+                    time.sleep(2)
 
         # 6. Locutor: grava narração
         audio_files = {}
@@ -303,7 +312,7 @@ class Company:
             try:
                 self.api._broadcast({"type": "stage_update", "stage": f"🎙️ {va.name}: gravando narração...", "agent": va.name})
                 va._report("Gerando áudio da narração...", 10)
-                audio_files = asyncio.run(va.generate_narration(segments[:len(news_items)]))
+                audio_files = asyncio.run(va.generate_narration(segments))
                 self.api._broadcast({"type": "audio_generated", "files_count": len(audio_files)})
                 self.api._broadcast({"type": "agent_xp", "key": "voice", "pct": 100})
             except Exception as e:
@@ -312,23 +321,27 @@ class Company:
         # 7. Editor: monta o vídeo final
         try:
             ea = hired.get("Editor de Vídeo")
-            if ea and audio_files:
+            if ea:
                 instr = instrucoes.get("Editor de Vídeo", "")
                 self.api._broadcast({"type": "stage_update", "stage": f"🎬 {ea.name}: editando vídeo final...", "agent": ea.name})
                 ea._report("Compondo vídeo com imagens e áudio...", 10)
                 main_audio = audio_files.get("full", "")
                 if main_audio and os.path.exists(main_audio):
                     ea._report("Renderizando vídeo...", 50)
-                    video_path = asyncio.run(ea.compose_video(main_audio, images, fmt))
-                    if video_path:
-                        self.videos += 1
-                        self.revenue += random.randint(10, 100)
-                        self.quality = min(100, self.quality + random.randint(1, 3))
-                        self.add_xp(random.randint(15, 40))
-                    self.api._broadcast({"type": "video_complete", "video_path": video_path,
-                        "output_dir": str(ROOT / "output" / "videos"),
-                        "message": f"Vídeo #{self.videos} finalizado!" if video_path else "Erro na edição"})
-                    self.api._broadcast({"type": "agent_xp", "key": "editor", "pct": 100})
+                    video_path = asyncio.run(ea.compose_video(main_audio, images, fmt, segments=segments))
+                else:
+                    # Vídeo sem áudio (fallback)
+                    ea._report("Renderizando vídeo sem áudio...", 50)
+                    video_path = asyncio.run(ea.compose_video(None, images, fmt, segments=segments))
+                if video_path:
+                    self.videos += 1
+                    self.revenue += random.randint(10, 100)
+                    self.quality = min(100, self.quality + random.randint(1, 3))
+                    self.add_xp(random.randint(15, 40))
+                self.api._broadcast({"type": "video_complete", "video_path": video_path,
+                    "output_dir": str(ROOT / "output" / "videos"),
+                    "message": f"Vídeo #{self.videos} finalizado!" if video_path else "Erro na edição"})
+                self.api._broadcast({"type": "agent_xp", "key": "editor", "pct": 100})
         except Exception as e:
             self.api._log(f"Erro ao editar vídeo: {e}", "error")
 
