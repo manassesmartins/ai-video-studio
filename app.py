@@ -559,14 +559,26 @@ class Api:
         role = data.get("role", "")
         if role in self._company._hired_roles:
             self._company._hired_roles.discard(role)
-            self._company._save_company_state()
-            self._settings.set("hired_roles", list(self._company._hired_roles))
             for a in self._agents:
                 if a.role == role:
                     a.hired = False
-            self._log(f"🔥 {role} foi demitido!")
+            if role == "CEO / Coordenador":
+                for a in self._agents:
+                    a.hired = False
+                self._company._hired_roles.clear()
+                self._log("🔥 Time inteiro demitido! Orquestrador vai remontar a equipe...")
+                threading.Thread(target=self._start_rehiring, daemon=True).start()
+            else:
+                self._log(f"🔥 {role} foi demitido!")
+            self._company._save_company_state()
+            self._settings.set("hired_roles", list(self._company._hired_roles))
             self._company._broadcast_state()
         return True
+
+    def _start_rehiring(self):
+        import time
+        time.sleep(1)
+        self._company._hiring_flow()
 
     def open_output_folder(self):
         import subprocess

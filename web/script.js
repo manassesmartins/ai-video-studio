@@ -454,8 +454,8 @@ function renderSettings(schema, full) {
             const testVoiceBtn = role === 'Artista de Voz' ? `
                 <button class="btn-rss-add" style="margin-top:4px" onclick="testVoice()">▶️ Testar Voz</button>
                 <span id="voiceTestStatus" style="font-size:10px;color:var(--text-secondary);align-self:center"></span>` : '';
-            const fireBtn = role !== 'CEO / Coordenador' ? `
-                <button class="btn-rss-add fire-agent-btn" onclick="fireAgent('${role}')">🔥 Demitir</button>` : '';
+            const fireBtn = `
+                <button class="btn-rss-add fire-agent-btn" onclick="fireAgent('${role}')">🔥 Demitir</button>`;
             agentCards += `
                 <div class="settings-agent-card" data-role="${role}">
                     <div class="settings-agent-header">
