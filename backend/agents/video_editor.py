@@ -1,7 +1,9 @@
 import os
 import time
 import glob
-import subprocess
+import shutil
+import tempfile
+
 from .base import BaseAgent
 
 
@@ -35,21 +37,43 @@ HABILIDADES TÉCNICAS:
                 return dev
         return None
 
-    def _gpu_render(self, codec: str) -> dict | None:
+    def _gpu_codec_and_wrapper(self, codec: str) -> tuple:
         gpu_accel = self.config.get("gpu_accel", False)
         if not gpu_accel:
-            return None
+            return codec, None
         supported = {"libx264": "h264_vaapi", "libx265": "hevc_vaapi", "h264_vaapi": "h264_vaapi", "hevc_vaapi": "hevc_vaapi"}
         gpu_codec = supported.get(codec)
         if not gpu_codec:
             self.log_action(f"GPU não suportada para codec {codec}")
-            return None
+            return codec, None
         dev = self._detect_vaapi_device()
         if not dev:
             self.log_action("Dispositivo VAAPI não encontrado, usando CPU")
-            return None
+            return codec, None
         self.log_action(f"GPU VAAPI ativada: {dev}")
-        return {"codec": gpu_codec, "device": dev}
+
+        wrapper_path = os.path.join(tempfile.gettempdir(), "ffmpeg-vaapi-wrapper.sh")
+        ffmpeg_bin = shutil.which("ffmpeg") or "/usr/bin/ffmpeg"
+        with open(wrapper_path, "w") as f:
+            f.write(f'''#!/bin/bash
+ARGS=()
+VAAPI_OK=0
+for arg in "$@"; do
+    if [ "$arg" = "-i" ] && [ $VAAPI_OK -eq 0 ]; then
+        ARGS+=(-vaapi_device {dev})
+        VAAPI_OK=1
+    fi
+    ARGS+=("$arg")
+done
+if [ $VAAPI_OK -eq 1 ]; then
+    LAST="${{ARGS[-1]}}"
+    unset ARGS[-1]
+    ARGS+=(-vf format=nv12,hwupload "$LAST")
+fi
+exec {ffmpeg_bin} "${{ARGS[@]}}"
+''')
+        os.chmod(wrapper_path, 0o755)
+        return gpu_codec, wrapper_path
 
     async def compose_video(self, audio_file: str, images: list, fmt: dict = None, output_filename: str = "final_video.mp4") -> str:
         self.set_status("composing")
@@ -154,44 +178,28 @@ Descreva brevemente como sera a composicao do video final.
             final = final.with_audio(audio_clip)
             final = final.resized(width=vid_w, height=vid_h)
 
-            gpu_info = self._gpu_render(vid_codec)
-
-            if gpu_info:
-                lossless_path = output_path.replace(f".{vid_ext}", "_lossless.mkv")
-                self.log_action(f"Renderizando lossless (1/2)...")
-                final.write_videofile(
-                    lossless_path,
-                    fps=vid_fps,
-                    codec="ffv1",
-                    audio_codec="pcm_s16le",
-                    logger=None,
-                )
-                self.log_action(f"Transcodificando com GPU VAAPI (2/2)...")
-                subprocess.run([
-                    "ffmpeg", "-y",
-                    "-vaapi_device", gpu_info["device"],
-                    "-i", lossless_path,
-                    "-c:v", gpu_info["codec"],
-                    "-vf", "format=nv12,hwupload",
-                    "-b:v", vid_bitrate,
-                    "-c:a", "aac",
-                    "-b:a", "192k",
-                    output_path,
-                ], capture_output=True)
-                if os.path.exists(lossless_path):
-                    os.remove(lossless_path)
+            gpu_codec, wrapper = self._gpu_codec_and_wrapper(vid_codec)
+            if wrapper:
+                self.log_action(f"Renderizando com GPU ({gpu_codec})...")
+                import moviepy.video.io.ffmpeg_writer as fw
+                original_ffmpeg = fw.FFMPEG_BINARY
+                fw.FFMPEG_BINARY = wrapper
             else:
-                self.log_action(f"Renderizando video final ({vid_codec})...")
+                self.log_action(f"Renderizando video final ({gpu_codec})...")
+            try:
                 final.write_videofile(
                     output_path,
                     fps=vid_fps,
-                    codec=vid_codec,
+                    codec=gpu_codec,
                     audio_codec=aud_codec,
                     bitrate=vid_bitrate,
                     temp_audiofile=os.path.join(output_dir, f"temp_{output_filename}.m4a"),
                     remove_temp=True,
                     logger=None
                 )
+            finally:
+                if wrapper:
+                    fw.FFMPEG_BINARY = original_ffmpeg
 
             audio_clip.close()
             final.close()
@@ -247,22 +255,16 @@ Descreva brevemente como sera a composicao do video final.
             ).with_duration(duration).with_position(("center", 0.7), relative=True)
 
             opening = CompositeVideoClip([bg, title, subtitle], size=(1920, 1080))
-            gpu_info = self._gpu_render("libx264")
-            if gpu_info:
-                lossless_path = opening_path.replace(".mp4", "_lossless.mkv")
-                opening.write_videofile(lossless_path, fps=24, codec="ffv1", logger=None)
-                subprocess.run([
-                    "ffmpeg", "-y",
-                    "-vaapi_device", gpu_info["device"],
-                    "-i", lossless_path,
-                    "-c:v", gpu_info["codec"],
-                    "-vf", "format=nv12,hwupload",
-                    opening_path,
-                ], capture_output=True)
-                if os.path.exists(lossless_path):
-                    os.remove(lossless_path)
-            else:
-                opening.write_videofile(opening_path, fps=24, codec="libx264", logger=None)
+            gpu_codec, wrapper = self._gpu_codec_and_wrapper("libx264")
+            if wrapper:
+                import moviepy.video.io.ffmpeg_writer as fw
+                original_ffmpeg = fw.FFMPEG_BINARY
+                fw.FFMPEG_BINARY = wrapper
+            try:
+                opening.write_videofile(opening_path, fps=24, codec=gpu_codec, logger=None)
+            finally:
+                if wrapper:
+                    fw.FFMPEG_BINARY = original_ffmpeg
             opening.close()
 
             self.log_action("Abertura criada!")
