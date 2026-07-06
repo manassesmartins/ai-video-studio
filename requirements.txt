@@ -1,0 +1,13 @@
+pywebview>=6,<7
+moviepy>=2,<3
+openai>=2,<3
+anthropic>=0.100,<1
+google-generativeai>=0.8,<1
+elevenlabs>=2,<3
+gtts>=2.5,<3
+feedparser>=6,<7
+requests>=2,<3
+beautifulsoup4>=4,<5
+python-dotenv>=1,<2
+Pillow>=10,<12
+numpy>=1,<3

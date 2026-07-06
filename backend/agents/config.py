@@ -1,0 +1,96 @@
+import os
+
+AGENT_PROVIDER_SCHEMA = {
+    "Jornalista de Tecnologia": {
+        "label": "Jornalista",
+        "emoji": "📰",
+        "providers": ["openrouter"],
+        "default_provider": "openrouter",
+        "default_model": "openai/gpt-4o-mini",
+        "actions": [
+            {"name": "Buscar Notícias", "type": "rss"},
+            {"name": "Resumir Artigos", "type": "chat"},
+            {"name": "Analisar Relevância", "type": "chat"},
+        ]
+    },
+    "Roteirista Criativo": {
+        "label": "Roteirista",
+        "emoji": "✍️",
+        "providers": ["openrouter"],
+        "default_provider": "openrouter",
+        "default_model": "openai/gpt-4o-mini",
+        "actions": [
+            {"name": "Criar Roteiro", "type": "chat"},
+            {"name": "Revisar Texto", "type": "chat"},
+            {"name": "Extrair Segmentos", "type": "chat"},
+        ]
+    },
+    "Artista de Voz": {
+        "label": "Locutor",
+        "emoji": "🎙️",
+        "providers": ["openrouter"],
+        "default_provider": "openrouter",
+        "default_model": "openai/tts-1",
+        "extra_fields": {
+            "voice": {"label": "Voz", "type": "select", "options": ["alloy", "echo", "fable", "nova", "shimmer"], "default": "alloy"},
+            "intro_prompt": {"label": "Frase de abertura", "type": "text", "default": "Olá pessoal! Sejam bem-vindos ao nosso resumo de notícias de tecnologia. Vamos conferir as principais novidades do mundo tech hoje."},
+            "outro_prompt": {"label": "Frase de encerramento", "type": "text", "default": "Obrigado por assistir! Não se esqueça de se inscrever para mais conteúdo. Até a próxima!"},
+        },
+        "actions": [
+            {"name": "Gerar Narração", "type": "tts"},
+            {"name": "Ajustar Entonação", "type": "settings"},
+        ]
+    },
+    "Designer de Imagens": {
+        "label": "Designer",
+        "emoji": "🎨",
+        "providers": ["openrouter"],
+        "default_provider": "openrouter",
+        "default_model": "openai/gpt-4o-mini",
+        "extra_fields": {"image_gen_model": {"label": "Modelo p/ gerar imagens por IA", "options": [], "default": "nenhum"}},
+        "actions": [
+            {"name": "Buscar Imagens", "type": "search"},
+            {"name": "Gerar Descrições", "type": "chat"},
+        ]
+    },
+    "Editor de Vídeo": {
+        "label": "Editor",
+        "emoji": "🎬",
+        "providers": ["local"],
+        "default_provider": "local",
+        "default_model": "moviepy",
+        "extra_fields": {"gpu_accel": {"label": "Aceleração GPU (VAAPI)", "type": "boolean", "default": False}},
+        "actions": [
+            {"name": "Compor Vídeo", "type": "local"},
+            {"name": "Adicionar Transições", "type": "local"},
+        ]
+    },
+    "CEO / Coordenador": {
+        "label": "Orquestrador",
+        "emoji": "👔",
+        "providers": ["openrouter"],
+        "default_provider": "openrouter",
+        "default_model": "openai/gpt-4o-mini",
+        "actions": [
+            {"name": "Definir Metas", "type": "chat"},
+            {"name": "Atribuir Tarefas", "type": "chat"},
+            {"name": "Avaliar Resultados", "type": "chat"},
+        ]
+    },
+}
+
+
+def default_config_for_role(role: str) -> dict:
+    schema = AGENT_PROVIDER_SCHEMA.get(role, {})
+    provider = schema.get("default_provider", "openrouter")
+    model = schema.get("default_model", "openai/gpt-4o-mini")
+    cfg = {
+        "provider": provider,
+        "model": model,
+        "api_key": "",
+        "temperature": 0.7,
+    }
+    extra = schema.get("extra_fields", {})
+    for key, val in extra.items():
+        cfg[key] = val.get("default", "")
+    return cfg

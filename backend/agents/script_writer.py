@@ -2,7 +2,7 @@ from .base import BaseAgent
 
 
 class ScriptWriter(BaseAgent):
-    def __init__(self, api_key: str):
+    def __init__(self, config: dict = None):
         system_prompt = """Você é um Roteirista especializado em criar conteúdos para vídeos do YouTube.
 
 SUAS HABILIDADES:
@@ -27,10 +27,10 @@ Seja criativo mas mantenha a fidelidade aos fatos das notícias."""
             name="Roteirista",
             role="Roteirista Criativo",
             system_prompt=system_prompt,
-            api_key=api_key
+            config=config
         )
 
-    async def create_script(self, news_items: list) -> str:
+    async def create_script(self, news_items: list, instruction: str = "") -> str:
         self.set_status("writing")
         self.log_action("Criando roteiro para o vídeo...")
 
@@ -38,36 +38,17 @@ Seja criativo mas mantenha a fidelidade aos fatos das notícias."""
         for i, news in enumerate(news_items, 1):
             news_text += f"\n--- NOTÍCIA {i} ---\n"
             news_text += f"Título: {news['title']}\n"
-            news_text += f"Fonte: {news['source']}\n"
-            news_text += f"Resumo: {news['summary'][:1500]}\n"
+            news_text += f"Resumo: {news['summary'][:500]}\n"
 
-        prompt = f"""Crie um roteiro COMPLETO para um vídeo do YouTube chamado "RESUMO DE NOTÍCIAS DE TECNOLOGIA".
+        instr_text = f"\nInstrução: {instruction[:200]}\n" if instruction else ""
 
-O vídeo terá {len(news_items)} notícias.
-
-Conteúdo das notícias:
+        prompt = f"""Crie roteiro para vídeo YouTube com {len(news_items)} notícias.
+{instr_text}
+Notícias:
 {news_text}
 
-O roteiro deve ter esta estrutura:
-
-=== ABERTURA ===
-[Abertura animada com música]
-"Olá pessoal! Sejam bem-vindos ao nosso resumo de notícias de tecnologia..."
-
-=== NOTÍCIAS ===
-[Para cada notícia:]
-- [TRANSICAO] animada
-- [IMAGEM: descrição da imagem necessária]
-- Texto da narração da notícia (bem detalhado)
-- Créditos da fonte: [fonte]
-
-=== ENCERRAMENTO ===
-"E essas foram as principais notícias de tecnologia..."
-[CHAMADA: Inscreva-se, ative o sininho, comente]
-
-IMPORTANTE: Escreva o texto COMPLETO da narração, como se o apresentador fosse falar. Inclua [IMAGEM: ...] e [TRANSICAO] nos lugares apropriados mas o texto de narração deve ser completo e fluido.
-
-Responda com o roteiro completo em português do Brasil.
+Estrutura: ABERTURA, cada notícia (com [TRANSICAO] e [IMAGEM:...]), ENCERRAMENTO.
+Texto completo da narração em português.
 """
         script = await self.think(prompt)
 
@@ -96,25 +77,12 @@ Faça ajustes se necessário e devolva a versão final."""
         self.set_status("analyzing")
         self.log_action("Extraindo segmentos do roteiro...")
 
-        prompt = f"""Analise o seguinte roteiro de vídeo e extraia os segmentos individuais:
+        prompt = f"""Extraia segmentos do roteiro:
 
-{script[:4000]}
+{script[:1500]}
 
-Para cada segmento de notícia, identifique:
-1. O título da notícia
-2. O texto da narração (apenas a parte narrada)
-3. A descrição da imagem necessária (entre [IMAGEM: ...])
-4. A fonte/créditos
-
-Responda APENAS com JSON:
-{{"segments": [
-    {{
-        "title": "título",
-        "narration": "texto da narração",
-        "image_desc": "descrição da imagem",
-        "credit": "créditos da fonte"
-    }}
-]}}
+Responda JSON:
+{{"segments": [{{"title": "...", "narration": "...", "image_desc": "...", "credit": "..."}}]}}
 """
         result = await self.think_json(prompt)
 

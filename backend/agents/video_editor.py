@@ -1,9 +1,12 @@
 import os
+import time
+import glob
+import subprocess
 from .base import BaseAgent
 
 
 class VideoEditor(BaseAgent):
-    def __init__(self, api_key: str):
+    def __init__(self, config: dict = None):
         system_prompt = """Você é um Editor de Vídeo profissional especializado em:
 
 1. Criar vídeos atraentes para YouTube com transições suaves
@@ -22,10 +25,33 @@ HABILIDADES TÉCNICAS:
             name="Editor",
             role="Editor de Vídeo",
             system_prompt=system_prompt,
-            api_key=api_key
+            config=config
         )
 
-    async def compose_video(self, audio_file: str, images: list, output_filename: str = "final_video.mp4") -> str:
+    def _detect_vaapi_device(self) -> str | None:
+        devices = sorted(glob.glob("/dev/dri/renderD*"))
+        for dev in devices:
+            if os.access(dev, os.R_OK | os.W_OK):
+                return dev
+        return None
+
+    def _gpu_render(self, codec: str) -> dict | None:
+        gpu_accel = self.config.get("gpu_accel", False)
+        if not gpu_accel:
+            return None
+        supported = {"libx264": "h264_vaapi", "libx265": "hevc_vaapi", "h264_vaapi": "h264_vaapi", "hevc_vaapi": "hevc_vaapi"}
+        gpu_codec = supported.get(codec)
+        if not gpu_codec:
+            self.log_action(f"GPU não suportada para codec {codec}")
+            return None
+        dev = self._detect_vaapi_device()
+        if not dev:
+            self.log_action("Dispositivo VAAPI não encontrado, usando CPU")
+            return None
+        self.log_action(f"GPU VAAPI ativada: {dev}")
+        return {"codec": gpu_codec, "device": dev}
+
+    async def compose_video(self, audio_file: str, images: list, fmt: dict = None, output_filename: str = "final_video.mp4") -> str:
         self.set_status("composing")
         self.log_action("Compondo o vídeo final...")
 
@@ -57,6 +83,22 @@ Descreva brevemente como sera a composicao do video final.
             audio_clip = AudioFileClip(audio_file)
             audio_duration = audio_clip.duration
 
+            v_fmt = (fmt or {}).get("video", {})
+            a_fmt = (fmt or {}).get("audio", {})
+            i_fmt = (fmt or {}).get("image", {})
+            vid_w = v_fmt.get("width", 1920)
+            vid_h = v_fmt.get("height", 1080)
+            vid_fps = v_fmt.get("fps", 24)
+            vid_codec = v_fmt.get("codec", "libx264")
+            vid_bitrate = v_fmt.get("bitrate", "5000k")
+            vid_ext = v_fmt.get("format", "mp4")
+            aud_codec = a_fmt.get("codec", "aac")
+            img_w = i_fmt.get("width", 1920)
+            img_h = i_fmt.get("height", 1080)
+
+            output_filename = f"video_{int(time.time())}.{vid_ext}"
+            output_path = os.path.join(output_dir, output_filename)
+
             img_duration = audio_duration / max(len(valid_images), 1)
             clips = []
 
@@ -64,7 +106,7 @@ Descreva brevemente como sera a composicao do video final.
                 img_path = img_info["local_path"]
                 credit = img_info.get("credit", "")
 
-                img_clip = ImageClip(img_path).with_duration(img_duration)
+                img_clip = ImageClip(img_path).with_duration(img_duration).resized(width=img_w, height=img_h)
 
                 try:
                     credit_txt = TextClip(
@@ -101,7 +143,7 @@ Descreva brevemente como sera a composicao do video final.
 
             if not clips:
                 from moviepy import ColorClip
-                bg = ColorClip(size=(1920, 1080), color=(30, 30, 30), duration=audio_duration)
+                bg = ColorClip(size=(vid_w, vid_h), color=(30, 30, 30), duration=audio_duration)
                 text_overlay = TextClip(
                     text="RESUMO DE NOTICIAS DE TECNOLOGIA",
                     font_size=60, color="white", font="Arial"
@@ -110,18 +152,46 @@ Descreva brevemente como sera a composicao do video final.
 
             final = concatenate_videoclips(clips, method="compose")
             final = final.with_audio(audio_clip)
-            final = final.resized(width=1920)
+            final = final.resized(width=vid_w, height=vid_h)
 
-            self.log_action("Renderizando video final...")
-            final.write_videofile(
-                output_path,
-                fps=24,
-                codec="libx264",
-                audio_codec="aac",
-                temp_audiofile_path=os.path.join(output_dir, "temp-audio.m4a"),
-                remove_temp=True,
-                logger=None
-            )
+            gpu_info = self._gpu_render(vid_codec)
+
+            if gpu_info:
+                lossless_path = output_path.replace(f".{vid_ext}", "_lossless.mkv")
+                self.log_action(f"Renderizando lossless (1/2)...")
+                final.write_videofile(
+                    lossless_path,
+                    fps=vid_fps,
+                    codec="ffv1",
+                    audio_codec="pcm_s16le",
+                    logger=None,
+                )
+                self.log_action(f"Transcodificando com GPU VAAPI (2/2)...")
+                subprocess.run([
+                    "ffmpeg", "-y",
+                    "-vaapi_device", gpu_info["device"],
+                    "-i", lossless_path,
+                    "-c:v", gpu_info["codec"],
+                    "-vf", "format=nv12,hwupload",
+                    "-b:v", vid_bitrate,
+                    "-c:a", "aac",
+                    "-b:a", "192k",
+                    output_path,
+                ], capture_output=True)
+                if os.path.exists(lossless_path):
+                    os.remove(lossless_path)
+            else:
+                self.log_action(f"Renderizando video final ({vid_codec})...")
+                final.write_videofile(
+                    output_path,
+                    fps=vid_fps,
+                    codec=vid_codec,
+                    audio_codec=aud_codec,
+                    bitrate=vid_bitrate,
+                    temp_audiofile=os.path.join(output_dir, f"temp_{output_filename}.m4a"),
+                    remove_temp=True,
+                    logger=None
+                )
 
             audio_clip.close()
             final.close()
@@ -177,7 +247,22 @@ Descreva brevemente como sera a composicao do video final.
             ).with_duration(duration).with_position(("center", 0.7), relative=True)
 
             opening = CompositeVideoClip([bg, title, subtitle], size=(1920, 1080))
-            opening.write_videofile(opening_path, fps=24, codec="libx264", logger=None)
+            gpu_info = self._gpu_render("libx264")
+            if gpu_info:
+                lossless_path = opening_path.replace(".mp4", "_lossless.mkv")
+                opening.write_videofile(lossless_path, fps=24, codec="ffv1", logger=None)
+                subprocess.run([
+                    "ffmpeg", "-y",
+                    "-vaapi_device", gpu_info["device"],
+                    "-i", lossless_path,
+                    "-c:v", gpu_info["codec"],
+                    "-vf", "format=nv12,hwupload",
+                    opening_path,
+                ], capture_output=True)
+                if os.path.exists(lossless_path):
+                    os.remove(lossless_path)
+            else:
+                opening.write_videofile(opening_path, fps=24, codec="libx264", logger=None)
             opening.close()
 
             self.log_action("Abertura criada!")

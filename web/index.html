@@ -3,61 +3,82 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YouTube AI Studio</title>
+    <title>AI Studio Corp</title>
+    <link rel="icon" type="image/png" href="../icon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div id="app">
         <header>
-            <div class="logo">
-                <span class="logo-icon">🎬</span>
-                <h1>YouTube AI Studio</h1>
+            <div class="brand">
+                <div class="brand-icon">
+                    <span class="icon-glow">⚡</span>
+                </div>
+                <div class="brand-info">
+                    <h1>AI Studio Corp</h1>
+                    <div class="badge-row">
+                        <span class="badge badge-level" id="companyLevel">Nv. 1</span>
+                        <span class="badge badge-status" id="companyStatus">✅ Pronto</span>
+                    </div>
+                </div>
             </div>
-            <div class="controls">
-                <button id="btnHire" class="btn btn-primary" onclick="startHiring()">
-                    🏢 Contratar Equipe
-                </button>
-                <button id="btnPipeline" class="btn btn-success" onclick="startPipeline()" disabled>
-                    🎬 Iniciar Produção
-                </button>
-                <button id="btnReset" class="btn btn-danger" onclick="resetAll()" style="display:none">
-                    🔄 Reiniciar
-                </button>
+
+            <div class="header-center">
+                <div class="evolution-bar">
+                    <div class="evol-label">
+                        <span>📈 Evolução</span>
+                        <span id="xpDisplay">0 / 100 XP</span>
+                    </div>
+                    <div class="evol-track">
+                        <div class="evol-fill" id="xpBar"></div>
+                    </div>
+                </div>
+                <div class="stats-mini">
+                    <div class="stat-mini">
+                        <span class="stat-mini-value" id="videoCount">0</span>
+                        <span class="stat-mini-label">Vídeos</span>
+                    </div>
+                    <div class="stat-mini">
+                        <span class="stat-mini-value" id="agentCount">0</span>
+                        <span class="stat-mini-label">Agentes</span>
+                    </div>
+                    <div class="stat-mini">
+                        <span class="stat-mini-value" id="revenueDisplay">$0</span>
+                        <span class="stat-mini-label">Receita</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="header-right">
+                <span class="clock" id="clock">00:00</span>
+                <button class="btn btn-produce" onclick="startProduction()" id="btnProduce" title="Iniciar ciclo de produção">🎬 Iniciar Produção</button>
+                <button class="btn-icon" onclick="toggleSettings()" title="Configurações">⚙️</button>
             </div>
         </header>
 
-        <div id="hiringBanner" class="hiring-banner" style="display:none">
-            <div class="hiring-content">
-                <span class="hiring-icon">🏢</span>
-                <div class="hiring-text">
-                    <strong>Processo Seletivo em Andamento</strong>
-                    <span id="hiringStatus">Abrindo vagas...</span>
-                </div>
-                <div class="hiring-progress">
-                    <div id="hiringBar" class="hiring-bar"></div>
-                </div>
-            </div>
-        </div>
-
         <main>
-            <div class="office-container">
-                <div class="office-header">
-                    <span>🏢 Escritório AI Studio</span>
-                    <span id="clock" class="clock">00:00</span>
+            <div class="office-section">
+                <div class="section-header">
+                    <span>🏢 Escritório</span>
+                    <span class="section-sub" id="companyMotto">Construindo o futuro da IA</span>
                 </div>
                 <div class="office-scene" id="officeScene">
                     <div class="office-wall">
-                        <div class="window left-window">☀️</div>
-                        <div class="window right-window">☀️</div>
+                        <div class="window left-win">🌆</div>
                         <div class="ceo-board" id="ceoBoard">
-                            <div class="board-title">📋 QUADRO DE METAS</div>
-                            <div class="board-item" id="boardStatus">Aguardando início...</div>
+                            <div class="board-title">🎯 META DA EMPRESA</div>
+                            <div class="board-item" id="boardStatus">Aguardando ordens, chefe!</div>
                         </div>
+                        <div class="window right-win">🌆</div>
                     </div>
                     <div class="office-floor">
-                        <div class="desk-row top-row">
+                        <div class="desk-row ork-row">
                             <div class="desk" id="desk-orchestrator">
-                                <div class="agent-avatar" id="avatar-orchestrator">
+                                <div class="agent-glow"></div>
+                                <div class="agent-avatar">
                                     <div class="agent-body">
                                         <div class="agent-head">👔</div>
                                         <div class="agent-computer">🖥️</div>
@@ -66,28 +87,34 @@
                                 <div class="desk-info">
                                     <div class="agent-name">Orquestrador</div>
                                     <div class="agent-role">CEO</div>
-                                    <div class="agent-status" id="status-orchestrator">🟢 Online</div>
+                                    <div class="agent-status" id="status-orchestrator">⏳</div>
+                                    <div class="agent-action" id="action-orchestrator"></div>
+                                    <div class="agent-progress"><div class="agent-progress-fill" id="prog-orchestrator"></div></div>
                                 </div>
-                                <div class="speech-bubble" id="bubble-orchestrator" style="display:none"></div>
+                                <div class="agent-xp-bar"><div class="agent-xp-fill" id="xp-orchestrator"></div></div>
+                                <div class="speech-bubble" id="bubble-orchestrator"></div>
                             </div>
                         </div>
-                        <div class="desk-row bottom-row">
+                        <div class="desk-row worker-row">
                             <div class="desk" id="desk-reporter">
-                                <div class="agent-avatar" id="avatar-reporter">
+                                <div class="agent-avatar">
                                     <div class="agent-body">
                                         <div class="agent-head">📰</div>
                                         <div class="agent-computer">🖥️</div>
                                     </div>
                                 </div>
                                 <div class="desk-info">
-                                    <div class="agent-name">Repórter Tech</div>
-                                    <div class="agent-role">Jornalista</div>
-                                    <div class="agent-status" id="status-reporter">⏳ Aguardando</div>
+                                    <div class="agent-name">Repórter</div>
+                                    <div class="agent-role">Notícias</div>
+                                    <div class="agent-status" id="status-reporter">⏳</div>
+                                    <div class="agent-action" id="action-reporter"></div>
+                                    <div class="agent-progress"><div class="agent-progress-fill" id="prog-reporter"></div></div>
                                 </div>
-                                <div class="speech-bubble" id="bubble-reporter" style="display:none"></div>
+                                <div class="agent-xp-bar"><div class="agent-xp-fill" id="xp-reporter"></div></div>
+                                <div class="speech-bubble" id="bubble-reporter"></div>
                             </div>
                             <div class="desk" id="desk-script">
-                                <div class="agent-avatar" id="avatar-script">
+                                <div class="agent-avatar">
                                     <div class="agent-body">
                                         <div class="agent-head">✍️</div>
                                         <div class="agent-computer">🖥️</div>
@@ -96,12 +123,15 @@
                                 <div class="desk-info">
                                     <div class="agent-name">Roteirista</div>
                                     <div class="agent-role">Criativo</div>
-                                    <div class="agent-status" id="status-script">⏳ Aguardando</div>
+                                    <div class="agent-status" id="status-script">⏳</div>
+                                    <div class="agent-action" id="action-script"></div>
+                                    <div class="agent-progress"><div class="agent-progress-fill" id="prog-script"></div></div>
                                 </div>
-                                <div class="speech-bubble" id="bubble-script" style="display:none"></div>
+                                <div class="agent-xp-bar"><div class="agent-xp-fill" id="xp-script"></div></div>
+                                <div class="speech-bubble" id="bubble-script"></div>
                             </div>
                             <div class="desk" id="desk-voice">
-                                <div class="agent-avatar" id="avatar-voice">
+                                <div class="agent-avatar">
                                     <div class="agent-body">
                                         <div class="agent-head">🎙️</div>
                                         <div class="agent-computer">🖥️</div>
@@ -110,12 +140,15 @@
                                 <div class="desk-info">
                                     <div class="agent-name">Locutor</div>
                                     <div class="agent-role">Voz</div>
-                                    <div class="agent-status" id="status-voice">⏳ Aguardando</div>
+                                    <div class="agent-status" id="status-voice">⏳</div>
+                                    <div class="agent-action" id="action-voice"></div>
+                                    <div class="agent-progress"><div class="agent-progress-fill" id="prog-voice"></div></div>
                                 </div>
-                                <div class="speech-bubble" id="bubble-voice" style="display:none"></div>
+                                <div class="agent-xp-bar"><div class="agent-xp-fill" id="xp-voice"></div></div>
+                                <div class="speech-bubble" id="bubble-voice"></div>
                             </div>
                             <div class="desk" id="desk-designer">
-                                <div class="agent-avatar" id="avatar-designer">
+                                <div class="agent-avatar">
                                     <div class="agent-body">
                                         <div class="agent-head">🎨</div>
                                         <div class="agent-computer">🖥️</div>
@@ -124,12 +157,15 @@
                                 <div class="desk-info">
                                     <div class="agent-name">Designer</div>
                                     <div class="agent-role">Imagens</div>
-                                    <div class="agent-status" id="status-designer">⏳ Aguardando</div>
+                                    <div class="agent-status" id="status-designer">⏳</div>
+                                    <div class="agent-action" id="action-designer"></div>
+                                    <div class="agent-progress"><div class="agent-progress-fill" id="prog-designer"></div></div>
                                 </div>
-                                <div class="speech-bubble" id="bubble-designer" style="display:none"></div>
+                                <div class="agent-xp-bar"><div class="agent-xp-fill" id="xp-designer"></div></div>
+                                <div class="speech-bubble" id="bubble-designer"></div>
                             </div>
                             <div class="desk" id="desk-editor">
-                                <div class="agent-avatar" id="avatar-editor">
+                                <div class="agent-avatar">
                                     <div class="agent-body">
                                         <div class="agent-head">🎬</div>
                                         <div class="agent-computer">🖥️</div>
@@ -138,52 +174,173 @@
                                 <div class="desk-info">
                                     <div class="agent-name">Editor</div>
                                     <div class="agent-role">Vídeo</div>
-                                    <div class="agent-status" id="status-editor">⏳ Aguardando</div>
+                                    <div class="agent-status" id="status-editor">⏳</div>
+                                    <div class="agent-action" id="action-editor"></div>
+                                    <div class="agent-progress"><div class="agent-progress-fill" id="prog-editor"></div></div>
                                 </div>
-                                <div class="speech-bubble" id="bubble-editor" style="display:none"></div>
+                                <div class="agent-xp-bar"><div class="agent-xp-fill" id="xp-editor"></div></div>
+                                <div class="speech-bubble" id="bubble-editor"></div>
                             </div>
                         </div>
-                        <div class="office-decoration">
-                            <div class="plant plant-left">🌿</div>
-                            <div class="plant plant-right">🌿</div>
-                            <div class="water-cooler">🚰</div>
+                        <div class="office-footer">
+                            <span>🌿</span>
+                            <span>🚰</span>
+                            <span class="footer-clock" id="companyTime"></span>
+                            <span>🚰</span>
+                            <span>🌿</span>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div class="panel-container">
-                <div class="panel panel-log">
+            <div class="dashboard-section">
+                <div class="panel dashboard-panel">
                     <div class="panel-header">
-                        <span>📋 Log da Produção</span>
+                        <span>📊 Dashboard</span>
+                        <span class="panel-badge" id="levelBadge">Nv. 1</span>
+                    </div>
+                    <div class="panel-body dash-body">
+                        <div class="dash-grid">
+                            <div class="dash-card card-videos">
+                                <div class="dash-icon">🎬</div>
+                                <div class="dash-info">
+                                    <span class="dash-value" id="dashVideos">0</span>
+                                    <span class="dash-label">Vídeos Produzidos</span>
+                                </div>
+                            </div>
+                            <div class="dash-card card-revenue">
+                                <div class="dash-icon">💰</div>
+                                <div class="dash-info">
+                                    <span class="dash-value" id="dashRevenue">$0</span>
+                                    <span class="dash-label">Receita Total</span>
+                                </div>
+                            </div>
+                            <div class="dash-card card-agents">
+                                <div class="dash-icon">👥</div>
+                                <div class="dash-info">
+                                    <span class="dash-value" id="dashAgents">0</span>
+                                    <span class="dash-label">Agentes</span>
+                                </div>
+                            </div>
+                            <div class="dash-card card-quality">
+                                <div class="dash-icon">⭐</div>
+                                <div class="dash-info">
+                                    <span class="dash-value" id="dashQuality">0%</span>
+                                    <span class="dash-label">Qualidade</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="evolution-panel">
+                            <div class="evol-header">🏆 Evolução da Empresa</div>
+                            <div class="evol-timeline" id="evolTimeline">
+                                <div class="evol-node active" data-lvl="1">
+                                    <div class="node-icon">🚀</div>
+                                    <div class="node-info">
+                                        <strong>Fundação</strong>
+                                        <span>A equipe inicial é formada</span>
+                                    </div>
+                                </div>
+                                <div class="evol-node locked" data-lvl="3">
+                                    <div class="node-icon">📈</div>
+                                    <div class="node-info">
+                                        <strong>Crescimento</strong>
+                                        <span>Produção em massa começa</span>
+                                    </div>
+                                </div>
+                                <div class="evol-node locked" data-lvl="5">
+                                    <div class="node-icon">🎯</div>
+                                    <div class="node-info">
+                                        <strong>Expansão</strong>
+                                        <span>Novos agentes disponíveis</span>
+                                    </div>
+                                </div>
+                                <div class="evol-node locked" data-lvl="10">
+                                    <div class="node-icon">🏭</div>
+                                    <div class="node-info">
+                                        <strong>Automação Total</strong>
+                                        <span>Produção 24/7 desbloqueada</span>
+                                    </div>
+                                </div>
+                                <div class="evol-node locked" data-lvl="20">
+                                    <div class="node-icon">🌐</div>
+                                    <div class="node-info">
+                                        <strong>Império</strong>
+                                        <span>Múltiplos canais ativos</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="production-log-mini">
+                            <div class="prod-header">📋 Últimas Produções</div>
+                            <div id="miniLog"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel log-panel">
+                    <div class="panel-header">
+                        <span>📡 Log da Corporação</span>
                         <span class="panel-badge" id="logCount">0</span>
                     </div>
                     <div class="panel-body" id="logPanel">
-                        <div class="log-empty">Bem-vindo ao AI Studio! Clique em "Contratar Equipe" para começar.</div>
-                    </div>
-                </div>
-                <div class="panel panel-output">
-                    <div class="panel-header">
-                        <span>📺 Prévia do Vídeo</span>
-                    </div>
-                    <div class="panel-body" id="outputPanel">
-                        <div class="output-placeholder">
-                            <div class="output-icon">🎬</div>
-                            <p>O vídeo aparecerá aqui após a produção</p>
-                        </div>
-                        <div id="outputContent" style="display:none">
-                            <div class="output-news-list" id="outputNewsList"></div>
-                            <div id="outputVideo"></div>
-                        </div>
+                        <div class="log-empty">Bem-vindo, chefe! A AI Studio Corp está pronta para começar.</div>
                     </div>
                 </div>
             </div>
         </main>
 
         <footer>
-            <span>YouTube AI Studio v1.0</span>
-            <span id="connectionStatus">🔴 Desconectado</span>
+            <span>AI Studio Corp v2.0 • Evoluindo constantemente</span>
+            <span id="connectionStatus">🟢 Operacional</span>
         </footer>
+    </div>
+
+    <div class="modal-overlay" id="hireModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span class="modal-icon">🤝</span>
+                <h2>Nova Contratação</h2>
+            </div>
+            <div class="modal-body" id="hireModalBody">
+                <div class="candidate-card">
+                    <div class="candidate-emoji" id="candidateEmoji">🤖</div>
+                    <div class="candidate-details">
+                        <div class="candidate-name" id="candidateName">Nome</div>
+                        <div class="candidate-role" id="candidateRole">Cargo</div>
+                        <div class="candidate-desc" id="candidateDesc">Descrição</div>
+                        <div class="candidate-skills" id="candidateSkills">
+                            <span class="skill-tag">Liderança</span>
+                            <span class="skill-tag">Estratégia</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="orchestrator-msg" id="orchestratorMsg">
+                    💬 Orquestrador: "Chefe, encontrei um ótimo candidato!"
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-reject" onclick="rejectHire()">❌ Recusar</button>
+                <button class="btn btn-approve" onclick="approveHire()">✅ Contratar</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="settingsModal">
+        <div class="modal-content settings-modal">
+            <div class="modal-header">
+                <span class="modal-icon">⚙️</span>
+                <h2>Configuração dos Agentes</h2>
+            </div>
+            <div class="modal-body" id="settingsBody">
+                <p style="color:var(--text-secondary);font-size:12px;text-align:center;padding:20px">Carregando...</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-reject" onclick="hideSettings()">❌ Fechar</button>
+                <button class="btn btn-approve" onclick="saveSettings()">💾 Salvar</button>
+            </div>
+        </div>
     </div>
 
     <script src="script.js"></script>

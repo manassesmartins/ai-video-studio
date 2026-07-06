@@ -1,12 +1,2 @@
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-websockets==12.0
-openai==1.6.1
-gtts==2.5.1
-moviepy==1.0.3
-feedparser==6.0.11
-requests==2.31.0
-beautifulsoup4==4.12.2
-python-dotenv==1.0.0
-Pillow==10.2.0
-python-multipart==0.0.6
+# Dependências consolidadas em requirements.txt (raiz)
+# Este arquivo mantido por compatibilidade; use o requirements.txt da raiz.

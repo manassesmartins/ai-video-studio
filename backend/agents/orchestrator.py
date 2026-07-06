@@ -3,159 +3,121 @@ from .base import BaseAgent
 
 
 class Orchestrator(BaseAgent):
-    def __init__(self, api_key: str):
-        system_prompt = """Você é o CEO de uma empresa de produção de vídeos para YouTube chamada "AI Studio".
-Sua função é:
-1. Contratar e gerenciar uma equipe de agentes de IA especializados
-2. Definir padrões de qualidade para cada função
-3. Coordenar o pipeline de produção de vídeos
-4. Tomar decisões sobre contratações com base nas entrevistas
-5. Celebrar as conquistas da equipe
+    def __init__(self, config: dict = None):
+        system_prompt = """Você é o CEO da AI Studio Corp, uma empresa de produção de vídeos.
 
-Seja um líder carismático, motivador e profissional. Responda em português."""
+SUAS RESPONSABILIDADES:
+1. Definir metas diárias e semanais para a equipe
+2. Atribuir tarefas específicas para cada agente
+3. Acompanhar o progresso e dar feedback
+4. Celebrar conquistas e motivar a equipe
+5. Garantir a qualidade do conteúdo produzido
+6. Decidir contratações estratégicas
+
+Seja um líder visionário, motivador e profissional. Responda em português."""
         super().__init__(
             name="Orquestrador",
             role="CEO / Coordenador",
             system_prompt=system_prompt,
-            api_key=api_key
+            config=config
         )
         self.team = {}
-        self.pipeline_status = "idle"
+
+    async def define_goal(self, company_level: int, videos_produced: int) -> dict:
+        self._report("Definindo metas da empresa...", 20)
+        prompt = f"""
+A AI Studio Corp está no nível {company_level} e já produziu {videos_produced} vídeos.
+
+Defina UMA meta clara e motivacional para o próximo ciclo de produção.
+A meta deve ser específica, mensurável e inspirar a equipe.
+
+Responda em JSON:
+{{"goal": "meta principal", "focus": "foco da equipe", "message": "mensagem motivacional para a equipe"}}
+"""
+        result = await self.think_json(prompt)
+        self._report("Metas definidas", 100)
+        return result if isinstance(result, dict) else {"goal": "Produzir mais vídeos", "focus": "qualidade", "message": "Vamos nessa!"}
+
+    async def plan_production(self, raw_news: list, count: int, company_level: int, videos_produced: int) -> dict:
+        self._report("Analisando notícias e planejando produção...", 10)
+        news_list = "\n".join(
+            f"{i+1}. [{n.get('source','')}] {n['title']}"
+            for i, n in enumerate(raw_news[:15])
+        )
+        prompt = f"""Nível {company_level}, {videos_produced} vídeos.
+Notícias:
+{news_list}
+
+Selecione {count} melhores e dê instruções para cada agente.
+Responda JSON:
+{{"goal":"...","focus":"...","message":"...","selected_indices":[1,2,3],"instructions":{{"Jornalista de Tecnologia":"...","Roteirista Criativo":"...","Designer de Imagens":"...","Artista de Voz":"...","Editor de Vídeo":"..."}}}}
+"""
+        result = await self.think_json(prompt)
+        self._report("Plano de produção definido", 100)
+        if isinstance(result, dict):
+            return result
+        return {
+            "goal": "Produzir vídeo com as principais notícias",
+            "focus": "qualidade e relevância",
+            "message": "Vamos produzir!",
+            "selected_indices": list(range(1, min(count, len(raw_news)) + 1)),
+            "instructions": {
+                "Jornalista de Tecnologia": "Detalhe cada notícia com precisão e contexto",
+                "Roteirista Criativo": "Crie um roteiro envolvente e bem estruturado",
+                "Designer de Imagens": "Encontre imagens relevantes para cada notícia",
+                "Artista de Voz": "Grave a narração com tom claro e profissional",
+                "Editor de Vídeo": "Edite o vídeo com transições suaves",
+            }
+        }
+
+    async def evaluate_cycle(self, results_summary: str) -> dict:
+        self._report("Avaliando resultados do ciclo...", 20)
+        prompt = f"""Avalie: {results_summary[:300]}
+Responda JSON: {{"score":0,"feedback":"...","improvement":"...","message":"..."}}
+"""
+        result = await self.think_json(prompt)
+        self._report("Avaliação concluída", 100)
+        return result if isinstance(result, dict) else {"score": 7, "feedback": "Bom trabalho!", "improvement": "Continue assim", "message": "Equipe nota 10!"}
 
     async def create_job_description(self, role: str) -> str:
         self.set_status("hiring")
+        self._report("Criando descrição de vaga...", 30)
         prompt = f"""
-Crie uma descrição de vaga detalhada para um agente de IA especializado em:
-{role}
+Crie uma descrição de vaga detalhada para um agente de IA especializado em: {role}
 
-A descrição deve incluir:
-- Título do cargo
-- Responsabilidades principais
-- Habilidades necessárias
-- Qualidade esperada
-- Tom: profissional mas acolhedor
-
-Responda em português.
+Inclua: título, responsabilidades, habilidades necessárias, qualidade esperada.
+Tom: profissional mas acolhedor. Responda em português.
 """
         return await self.think(prompt)
 
     async def interview_candidate(self, agent, job_description: str) -> dict:
-        self.set_status(f"interviewing_{agent.role}")
-        self.log_action(f"Iniciando entrevista para {agent.role} com {agent.name}...")
-
-        broadcast = getattr(self, '_broadcast', None)
-        if broadcast:
-            await broadcast({
-                "type": "interview_start",
-                "role": agent.role,
-                "agent_name": agent.name
-            })
-
+        self.set_status("interviewing")
+        self._report(f"Entrevistando {agent.name}...", 30)
         candidate_response = await agent.interview(job_description)
 
-        evaluation_prompt = f"""
-Avalie o seguinte candidato para a vaga de {agent.role}.
+        prompt = f"""
+Avalie este candidato para {agent.role}.
 
-Descrição da vaga: {job_description}
+Descrição: {job_description}
+Resposta: {candidate_response['answer']}
 
-Resposta do candidato: {candidate_response['answer']}
+Decida: contratar? Pontuação (0-10)? Justificativa?
 
-Com base na resposta, decida:
-1. O candidato deve ser contratado? (sim/não)
-2. Qual a pontuação de 0-10?
-3. Justificativa resumida.
-
-Responda em formato JSON:
-{{"hired": true/false, "score": 0-10, "reason": "justificativa", "feedback": "feedback para o candidato"}}
+Responda JSON:
+{{"hired": true/false, "score": 0-10, "reason": "...", "feedback": "..."}}
 """
-        evaluation = await self.think_json(evaluation_prompt)
+        evaluation = await self.think_json(prompt)
 
         if isinstance(evaluation, dict) and "hired" in evaluation:
             agent.hired = evaluation["hired"]
             candidate_response["hired"] = evaluation["hired"]
             candidate_response["score"] = evaluation.get("score", 5)
             candidate_response["reason"] = evaluation.get("reason", "")
-
             if evaluation["hired"]:
-                agent.personality = evaluation.get("feedback", "Profissional dedicado")
+                agent.personality = evaluation.get("feedback", "Profissional")
                 self.team[agent.role] = agent
-                self.log_action(f"✅ {agent.name} foi CONTRATADO para {agent.role}! Pontuação: {evaluation['score']}/10")
-            else:
-                self.log_action(f"❌ {agent.name} NÃO foi contratado para {agent.role}. Motivo: {evaluation.get('reason', '')}")
         else:
             candidate_response["hired"] = False
 
         self.set_status("idle")
         return candidate_response
-
-    async def hire_team(self, agents: list, broadcast_func) -> list:
-        self._broadcast = broadcast_func
-        self.set_status("hiring")
-        results = []
-
-        self.log_action("🏢 Iniciando processo de contratação da equipe!")
-        await broadcast_func({
-            "type": "hiring_start",
-            "message": "O Orquestrador está abrindo o processo seletivo!"
-        })
-
-        for agent in agents:
-            job_desc = await self.create_job_description(agent.role)
-
-            await broadcast_func({
-                "type": "job_created",
-                "role": agent.role,
-                "description": job_desc
-            })
-
-            await asyncio.sleep(1)
-            result = await self.interview_candidate(agent, job_desc)
-            results.append(result)
-
-            await broadcast_func({
-                "type": "interview_result",
-                "role": agent.role,
-                "agent_name": agent.name,
-                "hired": result.get("hired", False),
-                "score": result.get("score", 0),
-                "reason": result.get("reason", "")
-            })
-
-            await asyncio.sleep(0.5)
-
-        self.log_action(f"🎉 Equipe formada! {len(self.team)}/{len(agents)} agentes contratados!")
-        await broadcast_func({
-            "type": "hiring_complete",
-            "team_size": len(self.team),
-            "total": len(agents)
-        })
-
-        self.set_status("idle")
-        return results
-
-    async def assign_task(self, role: str, task: str, broadcast_func) -> str:
-        if role not in self.team:
-            return f"Erro: Nenhum agente contratado para {role}"
-
-        agent = self.team[role]
-        agent.set_status("working")
-
-        await broadcast_func({
-            "type": "task_start",
-            "role": role,
-            "agent_name": agent.name,
-            "task": task[:100]
-        })
-
-        self.log_action(f"📋 Atribuindo tarefa a {agent.name}: {task[:80]}...")
-        result = await agent.think(task)
-
-        agent.set_status("idle")
-        await broadcast_func({
-            "type": "task_complete",
-            "role": role,
-            "agent_name": agent.name,
-            "result_summary": result[:200]
-        })
-
-        return result

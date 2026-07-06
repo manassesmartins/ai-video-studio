@@ -1,10 +1,11 @@
 import os
 import requests
+import random
 from .base import BaseAgent
 
 
 class ImageDesigner(BaseAgent):
-    def __init__(self, api_key: str):
+    def __init__(self, config: dict = None):
         system_prompt = """Você é um Designer Gráfico / Editor de Imagens especializado em:
 
 1. Encontrar imagens relevantes para notícias de tecnologia
@@ -21,121 +22,149 @@ REGRAS IMPORTANTES:
             name="Designer",
             role="Designer de Imagens",
             system_prompt=system_prompt,
-            api_key=api_key
+            config=config
         )
-        self.unsplash_client_id = None
 
-    async def search_unsplash(self, query: str, max_results: int = 3) -> list:
-        try:
-            url = f"https://api.unsplash.org/search/photos"
-            params = {
-                "query": query,
-                "per_page": max_results,
-                "orientation": "landscape"
-            }
+    def _images_dir(self):
+        return os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "output", "images")
 
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            }
-
-            resp = requests.get(url, params=params, headers=headers, timeout=10)
-
-            if resp.status_code == 200:
-                data = resp.json()
-                results = []
-                for photo in data.get("results", []):
-                    results.append({
-                        "url": photo["urls"]["regular"],
-                        "download_url": photo["links"]["download"],
-                        "credit": f"Foto por {photo['user']['name']} no Unsplash",
-                        "credit_link": f"{photo['user']['links']['html']}?utm_source=AI_Studio&utm_medium=referral"
-                    })
-                return results
-            else:
-                return []
-
-        except Exception:
-            return []
-
-    async def search_image(self, query: str) -> dict:
-        self.set_status("searching_images")
-        self.log_action(f"Buscando imagens para: {query[:50]}...")
-
-        search_terms_prompt = f"""
-Crie 2 termos de busca em inglês para encontrar imagens relacionadas a:
-"{query}"
-
-Os termos devem ser objetivos e descritivos para busca de fotos.
-
-Responda JSON: {{"terms": ["termo1", "termo2"]}}
-"""
-        search_terms = await self.think_json(search_terms_prompt)
-        terms = search_terms.get("terms", [query]) if isinstance(search_terms, dict) else [query]
-
-        all_images = []
-        for term in terms[:2]:
-            unsplash_images = await self.search_unsplash(term)
-            all_images.extend(unsplash_images)
-
-        if all_images:
-            best = all_images[0]
-            self.log_action(f"✅ Imagem encontrada: créditos - {best['credit']}")
-            self.set_status("idle")
-            return best
-
+    async def generate_ai_image(self, prompt: str, filename: str) -> str:
+        model = self.config.get("image_gen_model", "") or ""
+        if model and model != "nenhum":
+            self.set_status("generating_ai")
+            self.log_action(f"Gerando imagem com IA ({model})...")
+            os.makedirs(self._images_dir(), exist_ok=True)
+            filepath = os.path.join(self._images_dir(), filename)
+            try:
+                from openrouter_client import create_client
+                client = create_client(self._api_key_override)
+                resp = client.images.generate(
+                    model=model,
+                    prompt=prompt[:1000],
+                    size="1792x1024" if "dall-e-3" in model else "1024x1024",
+                    quality="standard",
+                    n=1,
+                )
+                img_url = resp.data[0].url
+                if img_url:
+                    r = requests.get(img_url, timeout=30)
+                    if r.status_code == 200:
+                        with open(filepath, "wb") as f:
+                            f.write(r.content)
+                        self.log_action(f"✅ Imagem gerada por IA: {filename}")
+                        self.set_status("idle")
+                        return filepath
+            except Exception as e:
+                self.log_action(f"Erro ao gerar imagem por IA: {e}")
         self.set_status("idle")
-        return {"url": "", "credit": "Imagem não encontrada", "download_url": ""}
-
-    async def download_image(self, image_data: dict, filename: str) -> str:
-        if not image_data.get("url"):
-            return ""
-
-        self.set_status("downloading")
-        self.log_action(f"Baixando imagem: {filename}...")
-
-        output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "output", "images")
-        os.makedirs(output_dir, exist_ok=True)
-
-        filepath = os.path.join(output_dir, filename)
-
-        try:
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            }
-            resp = requests.get(image_data["url"], headers=headers, timeout=15)
-            if resp.status_code == 200:
-                with open(filepath, "wb") as f:
-                    f.write(resp.content)
-                self.log_action(f"✅ Imagem salva: {filename}")
-                return filepath
-        except Exception as e:
-            self.log_action(f"❌ Erro ao baixar imagem: {str(e)}")
-
         return ""
 
-    async def prepare_images(self, segments: list, news_items: list) -> list:
+    async def generate_placeholder(self, text: str, filename: str) -> str:
+        self.set_status("generating")
+        self.log_action(f"Gerando placeholder para: {text[:50]}...")
+        os.makedirs(self._images_dir(), exist_ok=True)
+        filepath = os.path.join(self._images_dir(), filename)
+        try:
+            from PIL import Image, ImageDraw, ImageFont
+            palettes = [
+                (30, 38, 58), (58, 30, 38), (38, 58, 30),
+                (20, 36, 56), (56, 20, 36), (36, 56, 20),
+                (25, 25, 50), (50, 25, 25), (25, 50, 25),
+                (40, 20, 50), (50, 40, 20), (20, 50, 40),
+            ]
+            bg = palettes[id(text) % len(palettes)] if isinstance(text, str) else random.choice(palettes)
+            img = Image.new("RGB", (1920, 1080), bg)
+            draw = ImageDraw.Draw(img)
+
+            try:
+                font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 48)
+            except (IOError, OSError):
+                try:
+                    font = ImageFont.truetype("/usr/share/fonts/TTF/DejaVuSans-Bold.ttf", 48)
+                except (IOError, OSError):
+                    font = ImageFont.load_default()
+
+            words = text.split()
+            lines = []
+            buf = ""
+            for w in words:
+                test = buf + " " + w if buf else w
+                try:
+                    tw = draw.textlength(test, font=font)
+                except AttributeError:
+                    tw = len(test) * 24
+                if tw > 1700 and buf:
+                    lines.append(buf)
+                    buf = w
+                else:
+                    buf = test
+            if buf:
+                lines.append(buf)
+            if not lines:
+                lines = [text[:80]]
+
+            y = 480
+            for line in lines:
+                try:
+                    tw = draw.textlength(line, font=font)
+                except AttributeError:
+                    tw = len(line) * 24
+                draw.text(((1920 - tw) / 2, y), line, fill=(200, 210, 230), font=font)
+                y += 56
+
+            y += 20
+            lw = min(1200, len(max(lines, key=len)) * 22)
+            draw.line(((1920 - lw) / 2, y, (1920 + lw) / 2, y), fill=(100, 140, 200), width=3)
+
+            img.save(filepath, "JPEG", quality=85)
+            self.log_action(f"✅ Placeholder gerado: {filename}")
+            self.set_status("idle")
+            return filepath
+        except ImportError:
+            self.log_action("Pillow não disponível, pulando placeholder")
+        except Exception as e:
+            self.log_action(f"Erro ao gerar placeholder: {e}")
+        self.set_status("idle")
+        return ""
+
+    async def prepare_images(self, segments: list, news_items: list, instruction: str = "") -> list:
         self.set_status("planning_images")
         self.log_action("Preparando imagens para o vídeo...")
-
         prepared_images = []
 
         for i, segment in enumerate(segments):
             title = segment.get("title", "")
             image_desc = segment.get("image_desc", title)
             credit = segment.get("credit", "")
-
-            image_data = await self.search_image(image_desc)
             filename = f"news_{i}.jpg"
-            local_path = await self.download_image(image_data, filename)
+            local_path = ""
 
             news_item = news_items[i] if i < len(news_items) else {}
-            source_credit = news_item.get("credit", credit)
+            article_images = news_item.get("article_images", [])
+
+            # 1. Usar imagem extraída do artigo
+            if article_images:
+                src = article_images[0].get("local_path", "")
+                if src and os.path.exists(src):
+                    local_path = src
+                    credit = article_images[0].get("credit", credit)
+                    self.log_action(f"✅ Usando imagem do artigo: {src}")
+
+            # 2. Tentar gerar por IA
+            if not local_path:
+                ai_path = await self.generate_ai_image(image_desc, filename)
+                if ai_path:
+                    local_path = ai_path
+
+            # 3. Fallback: placeholder
+            if not local_path:
+                local_path = await self.generate_placeholder(image_desc, filename)
 
             prepared_images.append({
                 "segment_index": i,
                 "title": title,
                 "local_path": local_path,
-                "credit": source_credit,
+                "credit": news_item.get("credit", credit),
                 "image_desc": image_desc
             })
 

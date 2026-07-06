@@ -255,7 +255,7 @@ async def run_pipeline(broadcast, news_count: int = 5):
         return
 
     step += 1
-    editor_agent = hired_agents.get("Editor de Vídeo")
+    editor_agent = hired_agents.get("Editor de Video")
     if editor_agent:
         await broadcast({
             "type": "stage_update",
