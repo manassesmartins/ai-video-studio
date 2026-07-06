@@ -38,6 +38,7 @@ DEFAULT_SETTINGS = {
         "height": 1080,
         "format": "jpg",
     },
+    "hired_roles": [],
     "theme": "default",
     "font_scale": 1.0,
     "layout_scale": 1.0,

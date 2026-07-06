@@ -59,7 +59,11 @@ class Company:
         self.videos = 0
         self.revenue = 0
         self.quality = 30
-        self._hired_roles = set()
+        self._hired_roles = set(settings.get("hired_roles", []))
+        if self._hired_roles:
+            for a in self._agents:
+                if a.role in self._hired_roles:
+                    a.hired = True
         self._hire_event = threading.Event()
         self._hire_approved = False
         self._cycle_count = 0
@@ -115,6 +119,11 @@ class Company:
         return False
 
     def start_hiring(self):
+        if self._hired_roles:
+            self.api._log("Equipe ja contratada! Pronta para produzir.", "hire")
+            self.api._broadcast({"type": "hiring_complete"})
+            self.api._board("Time completo! Quando quiser, clique em Iniciar Producao.")
+            return
         threading.Thread(target=self._hiring_flow, daemon=True).start()
         self.api._log("Orquestrador vai montar o time. Fique de olho nas solicitacoes!", "hire")
 
@@ -163,6 +172,7 @@ class Company:
             self._hired_roles.add(role)
             if agent_obj:
                 agent_obj.hired = True
+            self._settings.set("hired_roles", list(self._hired_roles))
             self.api._broadcast({"type": "hire_result", "hired": True, "name": name, "role": role})
             self.add_xp(20)
         else:
@@ -548,14 +558,16 @@ class Api:
 
     def test_voice(self, data: dict):
         text = data.get("text", "Olá, esta é a nova voz do seu narrador.")
-        voice = data.get("voice", "alloy")
-        model = data.get("model", "openai/tts-1")
+        voice = data.get("voice", "pt-BR-FranciscaNeural")
         for a in self._agents:
             if isinstance(a, VoiceArtist):
                 import asyncio
-                path = asyncio.run(a.test_voice(text, voice, model))
+                path = asyncio.run(a.test_voice(text, voice))
                 if path:
-                    return {"path": path, "message": "Áudio de teste gerado!"}
+                    import base64
+                    with open(path, "rb") as f:
+                        b64 = base64.b64encode(f.read()).decode("utf-8")
+                    return {"path": path, "data": f"data:audio/mp3;base64,{b64}", "message": "Áudio de teste gerado!"}
                 return {"path": "", "message": "Falha ao gerar áudio de teste"}
         return {"path": "", "message": "Artista de Voz não encontrado"}
 

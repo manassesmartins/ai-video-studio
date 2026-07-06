@@ -25,46 +25,36 @@ Sempre verifique a qualidade do áudio gerado."""
     def _audio_dir(self):
         return os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "output", "audio")
 
-    async def text_to_speech(self, text: str, filename: str, lang: str = "pt-br") -> str:
+    async def text_to_speech(self, text: str, filename: str, lang: str = "pt-br",
+                              voice: str = None, model: str = None) -> str:
         self.set_status("recording")
         self._report("Gerando áudio...", 20)
 
         os.makedirs(self._audio_dir(), exist_ok=True)
         filepath = os.path.join(self._audio_dir(), filename)
 
-        model = self.config.get("model", "openai/tts-1")
-        voice = self.config.get("voice", "alloy")
-        api_key = self._api_key_override or self.config.get("api_key", "")
+        voice = voice or self.config.get("voice", "pt-BR-FranciscaNeural")
 
-        opts = {"model": model, "voice": voice, "api_key": api_key}
+        self.log_action(f"Gerando áudio (voz={voice})...")
 
-        self.log_action(f"Gerando áudio (modelo={model}, voz={voice})...")
-
-        if "tts-1" in model and api_key:
+        if voice:
             try:
-                from openai import OpenAI
-                client = OpenAI(api_key=api_key, base_url="https://openrouter.ai/api/v1")
-                self._report("Gerando com OpenAI TTS via OpenRouter...", 40)
-                response = client.audio.speech.create(
-                    model=model,
-                    voice=voice,
-                    input=text[:4000],
-                    extra_headers={
-                        "HTTP-Referer": "https://github.com/ai-studio-corp",
-                        "X-Title": "AI Studio Corp",
-                    }
-                )
-                response.stream_to_file(filepath)
+                import edge_tts
+                self._report("Gerando com Edge TTS...", 40)
+                communicate = edge_tts.Communicate(text[:4000], voice)
+                await communicate.save(filepath)
                 if os.path.getsize(filepath) > 100:
-                    self.log_action(f"OpenRouter TTS: áudio salvo ({os.path.getsize(filepath)} bytes)")
+                    self.log_action(f"Edge TTS: áudio salvo ({os.path.getsize(filepath)} bytes)")
                     self._report("Áudio concluído", 100)
                     self.set_status("idle")
                     return filepath
-                self.log_action("OpenRouter TTS retornou áudio vazio, fallback para gTTS")
+                self.log_action("Edge TTS retornou áudio vazio, fallback para gTTS")
+            except ImportError:
+                self.log_action("edge-tts não instalado, fallback para gTTS")
             except Exception as e:
-                self.log_action(f"OpenRouter TTS falhou ({e}), fallback para gTTS")
+                self.log_action(f"Edge TTS falhou ({e}), fallback para gTTS")
         else:
-            self.log_action(f"Modelo TTS não configurado ou sem chave, usando gTTS")
+            self.log_action("Nenhuma voz configurada, usando gTTS")
 
         try:
             self._report("Gerando com gTTS...", 40)
@@ -80,9 +70,9 @@ Sempre verifique a qualidade do áudio gerado."""
             self.set_status("idle")
             return ""
 
-    async def test_voice(self, text: str = "Olá, esta é a nova voz do seu narrador.", voice: str = "alloy", model: str = "openai/tts-1") -> str:
-        self.log_action(f"Testando voz: {voice} ({model})...")
-        return await self.text_to_speech(text, "test_voice.mp3")
+    async def test_voice(self, text: str = "Olá, esta é a nova voz do seu narrador.", voice: str = "pt-BR-FranciscaNeural", model: str = "") -> str:
+        self.log_action(f"Testando voz: {voice}...")
+        return await self.text_to_speech(text, "test_voice.mp3", voice=voice)
 
     async def generate_narration(self, segments: list, output_name: str = "narration") -> dict:
         self.set_status("planning")
@@ -129,6 +119,6 @@ Sempre verifique a qualidade do áudio gerado."""
                 )
                 audio_files[f"segment_{i}"] = seg_file
 
-        self.log_action(f"✅ Geração de áudio concluída! {len(audio_files)} arquivos")
+        self.log_action(f"Geração de áudio concluída! {len(audio_files)} arquivos")
         self.set_status("idle")
         return audio_files

@@ -32,7 +32,7 @@ AGENT_PROVIDER_SCHEMA = {
         "default_provider": "openrouter",
         "default_model": "openai/tts-1",
         "extra_fields": {
-            "voice": {"label": "Voz", "type": "select", "options": ["alloy", "echo", "fable", "nova", "shimmer"], "default": "alloy"},
+            "voice": {"label": "Voz", "type": "select", "options": ["pt-BR-FranciscaNeural", "pt-BR-AntonioNeural", "pt-BR-ElzaNeural", "pt-BR-YaraNeural", "pt-BR-NicolasNeural", "pt-BR-BrendaNeural", "pt-BR-DanielNeural", "pt-BR-LeilaNeural", "pt-BR-JulioNeural", "pt-BR-MarciaNeural"], "default": "pt-BR-FranciscaNeural"},
             "intro_prompt": {"label": "Frase de abertura", "type": "text", "default": "Olá pessoal! Sejam bem-vindos ao nosso resumo de notícias de tecnologia. Vamos conferir as principais novidades do mundo tech hoje."},
             "outro_prompt": {"label": "Frase de encerramento", "type": "text", "default": "Obrigado por assistir! Não se esqueça de se inscrever para mais conteúdo. Até a próxima!"},
         },

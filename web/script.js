@@ -320,9 +320,20 @@ function toggleSettings() {
     });
 }
 
-function hideSettings() { $('settingsModal').classList.remove('show'); }
+function hideSettings() {
+    stopTestAudio();
+    $('settingsModal').classList.remove('show');
+}
 
 let settingsCache = {};
+let _currentTestAudio = null;
+
+function stopTestAudio() {
+    if (_currentTestAudio) {
+        _currentTestAudio.pause();
+        _currentTestAudio = null;
+    }
+}
 
 function renderSettings(schema, full) {
     const body = $('settingsBody');
@@ -686,24 +697,31 @@ function refreshSettings() {
 
 function psVal(sel) {
     const el = document.querySelector(sel);
-    return el ? el.dataset.value : '';
+    if (!el) return '';
+    return el.value !== undefined ? el.value : (el.dataset.value || '');
 }
 
 function testVoice() {
+    stopTestAudio();
     const card = document.querySelector('.settings-agent-card[data-role="Artista de Voz"]');
     if (!card) return;
-    const model = card.querySelector('.s-model')?.dataset?.value || 'openai/tts-1';
-    const voice = card.querySelector('.s-voice')?.dataset?.value || 'alloy';
+    const model = card.querySelector('.s-model')?.value || '';
+    const voice = card.querySelector('.s-voice')?.value || 'pt-BR-FranciscaNeural';
     const text = 'Olá, esta é a nova voz do seu narrador. Como está soando?';
     const status = document.getElementById('voiceTestStatus');
     if (status) status.textContent = '🔄 Gerando áudio de teste...';
     tryAPI('test_voice', { text, voice, model }).then(res => {
         if (res && res.path) {
             if (status) status.textContent = '✅ Tocando...';
-            const audio = new Audio('file://' + res.path);
-            audio.play().then(() => {
-                audio.onended = () => { if (status) status.textContent = '✅ Teste concluído'; };
+            const audioUrl = res.data || 'file://' + res.path;
+            _currentTestAudio = new Audio(audioUrl);
+            _currentTestAudio.play().then(() => {
+                _currentTestAudio.onended = () => {
+                    _currentTestAudio = null;
+                    if (status) status.textContent = '✅ Teste concluído';
+                };
             }).catch(e => {
+                _currentTestAudio = null;
                 if (status) status.textContent = '❌ Erro ao tocar: ' + e.message;
             });
         } else {
@@ -738,7 +756,7 @@ function saveSettings() {
         }
         if (role && !role.startsWith('_')) {
             const modelEl = card.querySelector('.s-model');
-            const model = modelEl ? modelEl.dataset.value : '';
+            const model = modelEl ? modelEl.value : '';
             const temp = parseFloat(card.querySelector('.s-temp')?.value) || 0.7;
             const isLocal = !modelEl || !model;
             const cfg = isLocal ? { provider: 'local', model: 'moviepy' } : { model, temperature: temp, provider: 'openrouter' };
@@ -749,7 +767,7 @@ function saveSettings() {
                     if (el.type === 'checkbox') {
                         cfg[cls.substring(2)] = el.checked;
                     } else {
-                        cfg[cls.substring(2)] = el.dataset.value || el.value || '';
+                        cfg[cls.substring(2)] = el.value || el.dataset.value || '';
                     }
                 }
             });
