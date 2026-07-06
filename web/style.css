@@ -492,6 +492,7 @@ main {
     gap: calc(6px * var(--layout-scale));
     margin-bottom: 8px;
     flex-wrap: wrap;
+    overflow: visible;
 }
 
 .ork-row { margin-bottom: 10px; }
@@ -509,7 +510,6 @@ main {
     position: relative;
     transition: all 0.3s;
     box-shadow: 2px 2px 0px #000;
-    overflow: hidden;
 }
 
 .desk:hover {
@@ -673,7 +673,7 @@ main {
     font-size: calc(12px * var(--font-scale));
     max-width: 160px;
     text-align: center;
-    z-index: 10;
+    z-index: 100;
     display: none;
     border: 2px solid #000;
     box-shadow: 2px 2px 0px #000;
@@ -808,65 +808,6 @@ main {
     color: var(--text-secondary);
     letter-spacing: 0.5px;
     margin-top: 2px;
-}
-
-.evolution-panel {
-    background: #0a0a1a;
-    border: 2px solid #2222aa;
-    padding: calc(8px * var(--layout-scale));
-    margin-bottom: 8px;
-}
-
-.evol-header {
-    font-size: calc(13px * var(--font-scale));
-    margin-bottom: 6px;
-    color: var(--pixel-gold);
-    letter-spacing: 0.5px;
-}
-
-.evol-timeline {
-    display: flex;
-    flex-direction: column;
-    gap: calc(4px * var(--layout-scale));
-}
-
-.evol-node {
-    display: flex;
-    align-items: center;
-    gap: calc(6px * var(--layout-scale));
-    padding: calc(4px * var(--layout-scale)) 6px;
-    border: 2px solid #111;
-    background: #050510;
-    opacity: 0.4;
-    transition: all 0.5s;
-}
-
-.evol-node.active {
-    opacity: 1;
-    border-color: var(--pixel-gold);
-    background: rgba(255,215,0,0.05);
-}
-
-.evol-node.unlocked {
-    opacity: 1;
-    border-color: var(--pixel-green);
-    background: rgba(68,255,136,0.05);
-}
-
-.node-icon { font-size: calc(14px * var(--font-scale)); }
-
-.node-info {
-    display: flex;
-    flex-direction: column;
-}
-
-.node-info strong {
-    font-size: calc(13px * var(--font-scale));
-}
-
-.node-info span {
-    font-size: calc(10px * var(--font-scale));
-    color: var(--text-secondary);
 }
 
 .production-log-mini {
@@ -1557,6 +1498,17 @@ input[type=range]::-webkit-slider-thumb {
 .btn-rss-add:active {
     transform: translate(1px, 1px);
     box-shadow: 1px 1px 0px #000;
+}
+
+.fire-agent-btn {
+    border-color: var(--pixel-red) !important;
+    color: var(--pixel-red) !important;
+    margin-top: 4px;
+}
+
+.fire-agent-btn:hover {
+    background: var(--pixel-red) !important;
+    color: #000 !important;
 }
 
 .settings-section-title {

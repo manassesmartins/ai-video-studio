@@ -54,11 +54,11 @@ class Company:
         self.api = api
         self._agents = agents
         self._settings = settings
-        self.level = 1
-        self.xp = 0
-        self.videos = 0
-        self.revenue = 0
-        self.quality = 30
+        self.level = settings.get("company_level", 1)
+        self.xp = settings.get("company_xp", 0)
+        self.videos = settings.get("company_videos", 0)
+        self.revenue = settings.get("company_revenue", 0)
+        self.quality = settings.get("company_quality", 30)
         self._hired_roles = set(settings.get("hired_roles", []))
         if self._hired_roles:
             for a in self._agents:
@@ -77,6 +77,13 @@ class Company:
                   10000, 15000, 20000, 30000, 50000, 75000, 100000]
         return levels[min(self.level - 1, len(levels) - 1)]
 
+    def _save_company_state(self):
+        self._settings.set("company_level", self.level)
+        self._settings.set("company_xp", self.xp)
+        self._settings.set("company_videos", self.videos)
+        self._settings.set("company_revenue", self.revenue)
+        self._settings.set("company_quality", self.quality)
+
     def add_xp(self, amount):
         self.xp += amount
         while self.xp >= self.xp_next() and self.level < 25:
@@ -85,6 +92,7 @@ class Company:
             unlocks = {1: "Equipe inicial", 3: "Producao em massa", 5: "Novos agentes",
                        7: "Qualidade 4K", 10: "Automacao total", 15: "Multiplos videos", 20: "Imperio de midia"}
             self.api._broadcast({"type": "level_up", "level": self.level, "unlock": unlocks.get(self.level, "Melhorias gerais")})
+        self._save_company_state()
         self._broadcast_state()
 
     def _broadcast_state(self):
@@ -546,6 +554,19 @@ class Api:
         if ok:
             self._log(f"Feed RSS removido: {url}")
         return ok
+
+    def fire_agent(self, data: dict):
+        role = data.get("role", "")
+        if role in self._company._hired_roles:
+            self._company._hired_roles.discard(role)
+            self._company._save_company_state()
+            self._settings.set("hired_roles", list(self._company._hired_roles))
+            for a in self._agents:
+                if a.role == role:
+                    a.hired = False
+            self._log(f"🔥 {role} foi demitido!")
+            self._company._broadcast_state()
+        return True
 
     def open_output_folder(self):
         import subprocess

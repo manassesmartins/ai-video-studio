@@ -1,4 +1,6 @@
 import os
+import subprocess
+import sys
 from gtts import gTTS
 from .base import BaseAgent
 
@@ -25,6 +27,23 @@ Sempre verifique a qualidade do áudio gerado."""
     def _audio_dir(self):
         return os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "output", "audio")
 
+    def _edge_tts_sync(self, text: str, voice: str, filepath: str) -> bool:
+        """Run edge-tts via subprocess (avoids asyncio event loop issues)."""
+        try:
+            cmd = [sys.executable, "-m", "edge_tts",
+                   "--text", text[:4000],
+                   "--voice", voice,
+                   "--write-media", filepath]
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            if r.returncode == 0 and os.path.getsize(filepath) > 100:
+                return True
+            self.log_action(f"edge-tts CLI falhou: {r.stderr[:200]}")
+        except FileNotFoundError:
+            self.log_action("edge-tts não instalado, fallback para gTTS")
+        except Exception as e:
+            self.log_action(f"edge-tts CLI erro: {e}")
+        return False
+
     async def text_to_speech(self, text: str, filename: str, lang: str = "pt-br",
                               voice: str = None, model: str = None) -> str:
         self.set_status("recording")
@@ -34,27 +53,18 @@ Sempre verifique a qualidade do áudio gerado."""
         filepath = os.path.join(self._audio_dir(), filename)
 
         voice = voice or self.config.get("voice", "pt-BR-FranciscaNeural")
+        if not voice.startswith("pt-"):
+            voice = "pt-BR-FranciscaNeural"
 
         self.log_action(f"Gerando áudio (voz={voice})...")
 
         if voice:
-            try:
-                import edge_tts
-                self._report("Gerando com Edge TTS...", 40)
-                communicate = edge_tts.Communicate(text[:4000], voice)
-                await communicate.save(filepath)
-                if os.path.getsize(filepath) > 100:
-                    self.log_action(f"Edge TTS: áudio salvo ({os.path.getsize(filepath)} bytes)")
-                    self._report("Áudio concluído", 100)
-                    self.set_status("idle")
-                    return filepath
-                self.log_action("Edge TTS retornou áudio vazio, fallback para gTTS")
-            except ImportError:
-                self.log_action("edge-tts não instalado, fallback para gTTS")
-            except Exception as e:
-                self.log_action(f"Edge TTS falhou ({e}), fallback para gTTS")
-        else:
-            self.log_action("Nenhuma voz configurada, usando gTTS")
+            self._report("Gerando com Edge TTS...", 40)
+            if self._edge_tts_sync(text, voice, filepath):
+                self.log_action(f"Edge TTS: áudio salvo ({os.path.getsize(filepath)} bytes)")
+                self._report("Áudio concluído", 100)
+                self.set_status("idle")
+                return filepath
 
         try:
             self._report("Gerando com gTTS...", 40)
@@ -70,7 +80,8 @@ Sempre verifique a qualidade do áudio gerado."""
             self.set_status("idle")
             return ""
 
-    async def test_voice(self, text: str = "Olá, esta é a nova voz do seu narrador.", voice: str = "pt-BR-FranciscaNeural", model: str = "") -> str:
+    async def test_voice(self, text: str = "Olá, esta é a nova voz do seu narrador.",
+                         voice: str = "pt-BR-FranciscaNeural", model: str = "") -> str:
         self.log_action(f"Testando voz: {voice}...")
         return await self.text_to_speech(text, "test_voice.mp3", voice=voice)
 

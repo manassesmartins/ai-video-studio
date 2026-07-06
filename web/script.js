@@ -100,6 +100,7 @@ function checkBridge() {
     if (window.pywebview && window.pywebview.api) {
         document.getElementById('connectionStatus').textContent = '\uD83D\uDFE2 Operacional';
         document.getElementById('connectionStatus').className = 'connected';
+        setTimeout(() => callAPI('start_hiring'), 500);
     } else {
         document.getElementById('connectionStatus').textContent = '\uD83D\uDD34 Bridge indispon\u00EDvel';
         document.getElementById('connectionStatus').className = '';
@@ -127,12 +128,6 @@ function updateCompanyUI() {
     $('revenueDisplay').textContent = `$${company.revenue}`;
     $('dashRevenue').textContent = `$${company.revenue}`;
     $('dashQuality').textContent = `${company.quality}%`;
-    document.querySelectorAll('.evol-node').forEach(n => {
-        const lvl = parseInt(n.dataset.lvl);
-        n.classList.remove('active', 'unlocked');
-        if (company.level >= lvl) n.classList.add('unlocked');
-        if (company.level === lvl) n.classList.add('active');
-    });
 }
 
 function updateAgentXP(key, pct) {
@@ -425,7 +420,12 @@ function renderSettings(schema, full) {
                 } else if (field.options && field.options.length) {
                     extraHtml += `<div class="settings-row">
                         <label>${field.label}</label>
-                        <select class="s-${key}">${field.options.map(o => `<option value="${o}" ${savedVal === o ? 'selected' : ''}>${o}</option>`).join('')}</select>
+                        <select class="s-${key}">${field.options.map(o => {
+                            const parts = o.split('|');
+                            const val = parts[0];
+                            const label = parts[1] || parts[0];
+                            return `<option value="${val}" ${savedVal === val ? 'selected' : ''}>${label}</option>`;
+                        }).join('')}</select>
                     </div>`;
                 } else {
                     extraHtml += `<div class="settings-row">
@@ -454,6 +454,8 @@ function renderSettings(schema, full) {
             const testVoiceBtn = role === 'Artista de Voz' ? `
                 <button class="btn-rss-add" style="margin-top:4px" onclick="testVoice()">▶️ Testar Voz</button>
                 <span id="voiceTestStatus" style="font-size:10px;color:var(--text-secondary);align-self:center"></span>` : '';
+            const fireBtn = role !== 'CEO / Coordenador' ? `
+                <button class="btn-rss-add fire-agent-btn" onclick="fireAgent('${role}')">🔥 Demitir</button>` : '';
             agentCards += `
                 <div class="settings-agent-card" data-role="${role}">
                     <div class="settings-agent-header">
@@ -470,6 +472,7 @@ function renderSettings(schema, full) {
                     </div>
                     ${extraHtml}
                     ${testVoiceBtn}
+                    ${fireBtn}
                     ${actionsHtml ? `<div class="settings-actions">${actionsHtml}</div>` : ''}
                 </div>`;
         }
@@ -732,6 +735,16 @@ function testVoice() {
     });
 }
 
+function fireAgent(role) {
+    if (!confirm(`🔥 Tem certeza que deseja demitir ${role}?`)) return;
+    callAPI('fire_agent', { role }).then(ok => {
+        if (ok) {
+            addLog(`🔥 <strong>${role}</strong> foi demitido.`, 'error');
+            refreshSettings();
+        }
+    });
+}
+
 function saveSettings() {
     const body = $('settingsBody');
     const payload = { video: {}, audio: {}, image: {} };
@@ -815,7 +828,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (k) updateAgentStatus(k, a.status, a.hired);
         });
     });
-    setTimeout(() => callAPI('start_hiring'), 1000);
     setInterval(() => {
         const now = new Date();
         $('clock').textContent = now.toTimeString().split(' ')[0];
