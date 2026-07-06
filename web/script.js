@@ -113,6 +113,11 @@ const AGENT_KEYS = {
     'Artista de Voz': 'voice', 'Designer de Imagens': 'designer',
     'Editor de V\u00EDdeo': 'editor', 'CEO / Coordenador': 'orchestrator'
 };
+const NAME_TO_KEY = {
+    'Repórter Tech': 'reporter', 'Roteirista': 'script',
+    'Locutor': 'voice', 'Designer': 'designer',
+    'Editor': 'editor', 'Orquestrador': 'orchestrator'
+};
 
 function $(id) { return document.getElementById(id); }
 
@@ -160,11 +165,22 @@ function handleMessage(msg) {
         case 'agent_xp':
             updateAgentXP(msg.key, msg.pct);
             break;
+        case 'agent_speaks':
+            const speakKey = AGENT_KEYS[msg.role] || 'orchestrator';
+            showBubble(speakKey, msg.text, msg.duration || 3000);
+            break;
+        case 'pipeline_start':
+            $('btnProduce').disabled = true;
+            $('btnProduce').textContent = '⏳ Produzindo...';
+            $('companyStatus').textContent = '⚙️ Produzindo';
+            $('companyStatus').style.color = '#fdcb6e';
+            addLog('🚀 <span class="log-msg">Iniciando ciclo de produção...</span>', 'hire');
+            break;
         case 'stage_update':
             $('boardStatus').textContent = msg.stage;
             addLog(`📋 <span class="log-msg">${msg.stage}</span>`);
-            const key = AGENT_KEYS[msg.agent];
-            if (key) { updateAgentStatus(key, 'working', true); showBubble(key, 'Trabalhando... ⚙️', 2000); }
+            const stageKey = NAME_TO_KEY[msg.agent] || AGENT_KEYS[msg.agent] || msg.agent;
+            if (stageKey) { updateAgentStatus(stageKey, 'working', true); showBubble(stageKey, 'Trabalhando... ⚙️', 2000); }
             break;
         case 'news_collected':
             addLog(`📰 <span class="log-msg">${msg.count} notícias coletadas!</span>`, 'agent-reporter');
