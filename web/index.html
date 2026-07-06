@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube AI Studio</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+        <header>
+            <div class="logo">
+                <span class="logo-icon">🎬</span>
+                <h1>YouTube AI Studio</h1>
+            </div>
+            <div class="controls">
+                <button id="btnHire" class="btn btn-primary" onclick="startHiring()">
+                    🏢 Contratar Equipe
+                </button>
+                <button id="btnPipeline" class="btn btn-success" onclick="startPipeline()" disabled>
+                    🎬 Iniciar Produção
+                </button>
+                <button id="btnReset" class="btn btn-danger" onclick="resetAll()" style="display:none">
+                    🔄 Reiniciar
+                </button>
+            </div>
+        </header>
+
+        <div id="hiringBanner" class="hiring-banner" style="display:none">
+            <div class="hiring-content">
+                <span class="hiring-icon">🏢</span>
+                <div class="hiring-text">
+                    <strong>Processo Seletivo em Andamento</strong>
+                    <span id="hiringStatus">Abrindo vagas...</span>
+                </div>
+                <div class="hiring-progress">
+                    <div id="hiringBar" class="hiring-bar"></div>
+                </div>
+            </div>
+        </div>
+
+        <main>
+            <div class="office-container">
+                <div class="office-header">
+                    <span>🏢 Escritório AI Studio</span>
+                    <span id="clock" class="clock">00:00</span>
+                </div>
+                <div class="office-scene" id="officeScene">
+                    <div class="office-wall">
+                        <div class="window left-window">☀️</div>
+                        <div class="window right-window">☀️</div>
+                        <div class="ceo-board" id="ceoBoard">
+                            <div class="board-title">📋 QUADRO DE METAS</div>
+                            <div class="board-item" id="boardStatus">Aguardando início...</div>
+                        </div>
+                    </div>
+                    <div class="office-floor">
+                        <div class="desk-row top-row">
+                            <div class="desk" id="desk-orchestrator">
+                                <div class="agent-avatar" id="avatar-orchestrator">
+                                    <div class="agent-body">
+                                        <div class="agent-head">👔</div>
+                                        <div class="agent-computer">🖥️</div>
+                                    </div>
+                                </div>
+                                <div class="desk-info">
+                                    <div class="agent-name">Orquestrador</div>
+                                    <div class="agent-role">CEO</div>
+                                    <div class="agent-status" id="status-orchestrator">🟢 Online</div>
+                                </div>
+                                <div class="speech-bubble" id="bubble-orchestrator" style="display:none"></div>
+                            </div>
+                        </div>
+                        <div class="desk-row bottom-row">
+                            <div class="desk" id="desk-reporter">
+                                <div class="agent-avatar" id="avatar-reporter">
+                                    <div class="agent-body">
+                                        <div class="agent-head">📰</div>
+                                        <div class="agent-computer">🖥️</div>
+                                    </div>
+                                </div>
+                                <div class="desk-info">
+                                    <div class="agent-name">Repórter Tech</div>
+                                    <div class="agent-role">Jornalista</div>
+                                    <div class="agent-status" id="status-reporter">⏳ Aguardando</div>
+                                </div>
+                                <div class="speech-bubble" id="bubble-reporter" style="display:none"></div>
+                            </div>
+                            <div class="desk" id="desk-script">
+                                <div class="agent-avatar" id="avatar-script">
+                                    <div class="agent-body">
+                                        <div class="agent-head">✍️</div>
+                                        <div class="agent-computer">🖥️</div>
+                                    </div>
+                                </div>
+                                <div class="desk-info">
+                                    <div class="agent-name">Roteirista</div>
+                                    <div class="agent-role">Criativo</div>
+                                    <div class="agent-status" id="status-script">⏳ Aguardando</div>
+                                </div>
+                                <div class="speech-bubble" id="bubble-script" style="display:none"></div>
+                            </div>
+                            <div class="desk" id="desk-voice">
+                                <div class="agent-avatar" id="avatar-voice">
+                                    <div class="agent-body">
+                                        <div class="agent-head">🎙️</div>
+                                        <div class="agent-computer">🖥️</div>
+                                    </div>
+                                </div>
+                                <div class="desk-info">
+                                    <div class="agent-name">Locutor</div>
+                                    <div class="agent-role">Voz</div>
+                                    <div class="agent-status" id="status-voice">⏳ Aguardando</div>
+                                </div>
+                                <div class="speech-bubble" id="bubble-voice" style="display:none"></div>
+                            </div>
+                            <div class="desk" id="desk-designer">
+                                <div class="agent-avatar" id="avatar-designer">
+                                    <div class="agent-body">
+                                        <div class="agent-head">🎨</div>
+                                        <div class="agent-computer">🖥️</div>
+                                    </div>
+                                </div>
+                                <div class="desk-info">
+                                    <div class="agent-name">Designer</div>
+                                    <div class="agent-role">Imagens</div>
+                                    <div class="agent-status" id="status-designer">⏳ Aguardando</div>
+                                </div>
+                                <div class="speech-bubble" id="bubble-designer" style="display:none"></div>
+                            </div>
+                            <div class="desk" id="desk-editor">
+                                <div class="agent-avatar" id="avatar-editor">
+                                    <div class="agent-body">
+                                        <div class="agent-head">🎬</div>
+                                        <div class="agent-computer">🖥️</div>
+                                    </div>
+                                </div>
+                                <div class="desk-info">
+                                    <div class="agent-name">Editor</div>
+                                    <div class="agent-role">Vídeo</div>
+                                    <div class="agent-status" id="status-editor">⏳ Aguardando</div>
+                                </div>
+                                <div class="speech-bubble" id="bubble-editor" style="display:none"></div>
+                            </div>
+                        </div>
+                        <div class="office-decoration">
+                            <div class="plant plant-left">🌿</div>
+                            <div class="plant plant-right">🌿</div>
+                            <div class="water-cooler">🚰</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel-container">
+                <div class="panel panel-log">
+                    <div class="panel-header">
+                        <span>📋 Log da Produção</span>
+                        <span class="panel-badge" id="logCount">0</span>
+                    </div>
+                    <div class="panel-body" id="logPanel">
+                        <div class="log-empty">Bem-vindo ao AI Studio! Clique em "Contratar Equipe" para começar.</div>
+                    </div>
+                </div>
+                <div class="panel panel-output">
+                    <div class="panel-header">
+                        <span>📺 Prévia do Vídeo</span>
+                    </div>
+                    <div class="panel-body" id="outputPanel">
+                        <div class="output-placeholder">
+                            <div class="output-icon">🎬</div>
+                            <p>O vídeo aparecerá aqui após a produção</p>
+                        </div>
+                        <div id="outputContent" style="display:none">
+                            <div class="output-news-list" id="outputNewsList"></div>
+                            <div id="outputVideo"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <span>YouTube AI Studio v1.0</span>
+            <span id="connectionStatus">🔴 Desconectado</span>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
