@@ -1,0 +1,47 @@
+{
+  "agent_configs": {
+    "Jornalista de Tecnologia": {
+      "model": "openai/gpt-4o-mini",
+      "temperature": 0.7,
+      "provider": "openrouter"
+    },
+    "Roteirista Criativo": {
+      "model": "openai/gpt-4o-mini",
+      "temperature": 0.7,
+      "provider": "openrouter"
+    },
+    "Artista de Voz": {
+      "model": "openai/tts-1",
+      "temperature": 0.7,
+      "provider": "openrouter",
+      "intro_prompt": "Ol\u00e1 pessoal! Sejam bem-vindos ao nosso resumo de not\u00edcias de tecnologia. Vamos conferir as principais novidades do mundo tech hoje.",
+      "outro_prompt": "Obrigado por assistir! N\u00e3o se esque\u00e7a de se inscrever para mais conte\u00fado. At\u00e9 a pr\u00f3xima!"
+    },
+    "Designer de Imagens": {
+      "model": "openai/gpt-4o-mini",
+      "temperature": 0.7,
+      "provider": "openrouter"
+    },
+    "Editor de V\u00eddeo": {
+      "provider": "local",
+      "model": "moviepy",
+      "temperature": 0.7
+    }
+  },
+  "news_count": 5,
+  "rss_feeds": [
+    "https://www.tecmundo.com.br/feed",
+    "https://g1.globo.com/rss/g1/tecnologia/",
+    "https://olhardigital.com.br/feed",
+    "https://www.theverge.com/rss/index.xml",
+    "https://www.wired.com/feed/rss",
+    "https://arstechnica.com/feed/",
+    "https://techcrunch.com/feed/",
+    "https://www.engadget.com/rss.xml"
+  ],
+  "openrouter_api_key": "",
+  "cached_models": [],
+  "theme": "retro-game",
+  "font_scale": 1.0,
+  "layout_scale": 1.0
+}
