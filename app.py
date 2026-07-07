@@ -24,7 +24,7 @@ from agents.image_designer import ImageDesigner
 from agents.video_editor import VideoEditor
 from agents.config import AGENT_PROVIDER_SCHEMA, default_config_for_role
 from settings_manager import SettingsManager
-from openrouter_client import fetch_models
+from openrouter_client import fetch_models, pick_free_model_for_role
 
 NEW_AGENT_TEMPLATES = [
     {"name": "Analista de Dados", "emoji": "📊", "skills": ["Analise", "Metricas", "Relatorios"]},
@@ -69,6 +69,7 @@ class Company:
         self._cycle_count = 0
         self._producing = False
         self._news_count = settings.get("news_count", 5)
+        self._news_category = settings.get("news_category", "Tecnologia")
         self._seen_news = set()
         self._rss_feeds = list(settings.get("rss_feeds", []))
 
@@ -106,6 +107,10 @@ class Company:
     def set_news_count(self, count):
         self._news_count = max(1, min(20, count))
         self._settings.set("news_count", self._news_count)
+
+    def set_news_category(self, category):
+        self._news_category = category
+        self._settings.set("news_category", category)
 
     def get_rss_feeds(self):
         return list(self._rss_feeds)
@@ -231,13 +236,15 @@ class Company:
             try:
                 self.api._broadcast({"type": "stage_update", "stage": "🧠 Orquestrador analisando notícias e planejando produção...", "agent": "Orquestrador"})
                 orquestrador._report("Selecionando melhores notícias e definindo tarefas...", 20)
-                plano = asyncio.run(orquestrador.plan_production(raw_news, count, self.level, self.videos))
+                plano = asyncio.run(orquestrador.plan_production(raw_news, count, self.level, self.videos, self._news_category))
                 orquestrador._report("Plano definido", 100)
             except Exception as e:
                 self.api._log(f"Erro no planejamento: {e}", "error")
 
+        categoria = self._news_category
         meta = plano.get("goal", "Produzir com qualidade")
         mensagem = plano.get("message", "Vamos produzir!")
+        self.api._log(f"📂 Categoria selecionada: {categoria}", "hire")
         self.api._board(f"Meta: {meta}")
         self.api._log(f'Orquestrador: "{mensagem}"', "agent-orchestrator")
         self.api._broadcast({"type": "agent_speaks", "role": "CEO / Coordenador", "text": mensagem, "duration": 4000})
@@ -268,7 +275,6 @@ class Company:
                 self.api._log(f"Erro ao enriquecer notícias: {e}", "error")
 
         # 4. Roteirista: cria roteiro seguindo a instrução do orquestrador
-        segments = []
         sa = hired.get("Roteirista Criativo")
         if sa and news_items:
             try:
@@ -276,16 +282,25 @@ class Company:
                 self.api._broadcast({"type": "stage_update", "stage": f"✍️ {sa.name}: criando roteiro...", "agent": sa.name})
                 sa._report("Escrevendo roteiro com as notícias...", 10)
                 script = asyncio.run(sa.create_script(news_items, instr))
-                segments = asyncio.run(sa.extract_segments(script))
-                self.api._broadcast({"type": "script_created", "segments_count": len(segments)})
                 self.api._broadcast({"type": "agent_xp", "key": "script", "pct": 100})
             except Exception as e:
                 self.api._log(f"Erro ao criar roteiro: {e}", "error")
 
-        # Fallback: se não houver segmentos, cria um segmento genérico
-        if not segments and news_items:
-            segments = [{"title": n.get("title", "Notícia"), "narration": n.get("summary", n.get("title", "")), "image_desc": n.get("title", ""), "credit": n.get("source", "")} for n in news_items]
-            self.api._log("⚠️ Usando segmentos genéricos (roteiro não gerou segmentos)", "error")
+        # Segmentos são criados diretamente das notícias (sem LLM)
+        segments = []
+        if news_items:
+            for n in news_items:
+                narration = n.get("summary", n.get("title", ""))
+                if narration == "[Processado localmente]" or not narration:
+                    narration = n.get("title", "")
+                segments.append({
+                    "title": n.get("title", "Notícia"),
+                    "narration": narration,
+                    "image_desc": n.get("title", ""),
+                    "credit": n.get("source", "")
+                })
+            self.api._log(f"📋 {len(segments)} segmentos gerados das notícias", "hire")
+            self.api._broadcast({"type": "script_created", "segments_count": len(segments)})
 
         # 5. Designer: busca imagens seguindo a instrução do orquestrador
         images = []
@@ -298,6 +313,7 @@ class Company:
                     ia._report("Buscando imagens para cada notícia...", 10)
                     images = asyncio.run(ia.prepare_images(segments, news_items, instr))
                     if images:
+                        self.api._broadcast({"type": "images_prepared", "count": len(images)})
                         break
                     self.api._log(f"Tentativa {attempt+1}: nenhuma imagem, tentando de novo...", "error")
                     time.sleep(2)
@@ -354,6 +370,7 @@ class Company:
         score = eval_result.get("score", 7)
         self.api._log(f'Orquestrador: "{feedback}" (Nota: {score}/10)', "agent-orchestrator")
 
+        self.api._broadcast({"type": "reset_all_agents"})
         self.api._broadcast({"type": "pipeline_complete",
             "message": f"Ciclo #{self._cycle_count} concluído! Nota: {score}/10"})
         self.api._board(f"Vídeo #{self.videos} | Nv.{self.level} | Próximo ciclo quando quiser!")
@@ -406,12 +423,31 @@ class Api:
 
         self._apply_saved_agent_configs()
         self._propagate_api_key()
+        self._auto_assign_free_models()
         self._sync_rss_feeds()
 
     def _propagate_api_key(self):
         key = self._settings.get("openrouter_api_key", "")
         for a in self._agents:
             a.set_global_api_key(key)
+
+    def _auto_assign_free_models(self):
+        cached = self._settings.get("cached_models", [])
+        if not cached:
+            return
+        configs = self._settings.get("agent_configs", {})
+        changed = False
+        for a in self._agents:
+            if a.config.get("provider") == "openrouter":
+                best = pick_free_model_for_role(a.role, cached)
+                if best and a.config.get("model") != best:
+                    a.config["model"] = best
+                    configs[a.role] = dict(configs.get(a.role, {}))
+                    configs[a.role]["model"] = best
+                    configs[a.role]["provider"] = "openrouter"
+                    changed = True
+        if changed:
+            self._settings.set("agent_configs", configs)
 
     def _apply_saved_agent_configs(self):
         saved = self._settings.get("agent_configs", {})
@@ -469,6 +505,7 @@ class Api:
         models = fetch_models(key)
         if models:
             self._settings.set("cached_models", models)
+            self._auto_assign_free_models()
         return models
 
     def get_settings_full(self):
@@ -480,6 +517,7 @@ class Api:
         cached = stg.get("cached_models", [])
         schema["_meta"] = {
             "news_count": self._company._news_count,
+            "news_category": self._company._news_category,
             "rss_feeds": list(self._company._rss_feeds),
             "openrouter_api_key": stg.get("openrouter_api_key", ""),
             "available_models": [m["id"] for m in cached],
@@ -502,10 +540,12 @@ class Api:
         return schema
 
     def update_settings_full(self, payload: dict):
-        for key in ["news_count", "rss_feeds", "theme", "font_scale", "layout_scale"]:
+        for key in ["news_count", "news_category", "rss_feeds", "theme", "font_scale", "layout_scale"]:
             if key in payload:
                 if key == "news_count":
                     self._company.set_news_count(payload[key])
+                elif key == "news_category":
+                    self._company.set_news_category(payload[key])
                 elif key == "rss_feeds":
                     self._company._rss_feeds = list(payload[key])
                     self._settings.set("rss_feeds", list(payload[key]))

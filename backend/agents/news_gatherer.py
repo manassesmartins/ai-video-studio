@@ -96,6 +96,7 @@ Responda em português do Brasil."""
 
     async def extract_article_images(self, url: str) -> list:
         images = []
+        seen_urls = set()
         try:
             headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
             resp = requests.get(url, headers=headers, timeout=5)
@@ -106,11 +107,11 @@ Responda em português do Brasil."""
                 name = (meta.get("name") or "").lower()
                 if prop == "og:image" or name == "twitter:image":
                     src = meta.get("content", "").strip()
-                    if src and src.startswith("http"):
+                    if src and src.startswith("http") and src not in seen_urls:
+                        seen_urls.add(src)
                         alt = (meta.get("alt") or "") or soup.find("title")
                         alt = alt.get_text()[:100] if hasattr(alt, "get_text") else str(alt)[:100]
                         images.append({"url": src, "alt": alt or url.rsplit("/", 1)[-1], "credit": url})
-                        return [images[-1]]
 
             for img in soup.find_all("img"):
                 src = img.get("src", "").strip()
@@ -123,6 +124,9 @@ Responda em português do Brasil."""
                         src = f"{parsed.scheme}://{parsed.netloc}{src}"
                     else:
                         continue
+                if src in seen_urls:
+                    continue
+                seen_urls.add(src)
                 alt = img.get("alt", "")[:100]
                 w = img.get("width", "0")
                 h = img.get("height", "0")
@@ -132,7 +136,7 @@ Responda em português do Brasil."""
                 except ValueError:
                     pass
                 images.append({"url": src, "alt": alt or "Imagem do artigo", "credit": url})
-                if len(images) >= 2:
+                if len(images) >= 10:
                     break
         except Exception:
             pass
@@ -158,11 +162,16 @@ Responda em português do Brasil."""
         self.set_status("gathering_details")
         self.log_action("Aprofundando os detalhes das notícias selecionadas...")
 
+        provider = self.config.get("provider", "openrouter")
+
         enriched = []
         for i, news in enumerate(news_list):
             content = await self.fetch_article_content(news.get("url", ""))
 
-            prompt = f"""Resuma esta notícia de tecnologia:
+            if provider == "local":
+                article_summary = news.get("summary", news.get("title", ""))
+            else:
+                prompt = f"""Resuma esta notícia de tecnologia:
 
 Título: {news['title']}
 Fonte: {news['source']}
@@ -172,7 +181,7 @@ Conteúdo: {content[:800]}
 
 Responda: fato principal, contexto, impacto. Português.
 """
-            article_summary = await self.think(prompt)
+                article_summary = await self.think(prompt)
 
             article_images = []
             if not content.startswith("Erro"):
@@ -181,8 +190,6 @@ Responda: fato principal, contexto, impacto. Português.
                     local = await self.download_article_image(img, i, j)
                     if local:
                         article_images.append({"url": img["url"], "local_path": local, "alt": img.get("alt", ""), "credit": f"Fonte: {news['source']}"})
-                    if len(article_images) >= 2:
-                        break
 
             enriched.append({
                 "title": news["title"],

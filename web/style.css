@@ -748,10 +748,16 @@ main {
     padding: calc(8px * var(--layout-scale));
     flex: 1;
     overflow-y: auto;
-    max-height: calc(220px * var(--layout-scale));
 }
 
 .dash-body { max-height: none; }
+
+.log-panel .panel-body {
+    max-height: 100%;
+    min-height: 0;
+    height: 0;
+    flex: 1 1 0;
+}
 
 .dash-grid {
     display: grid;
@@ -1062,14 +1068,65 @@ footer {
 }
 
 .settings-modal {
-    max-width: calc(560px * var(--layout-scale));
+    max-width: calc(640px * var(--layout-scale));
 }
 
 .settings-modal .modal-body {
-    max-height: 400px;
+    max-height: 450px;
     overflow-y: auto;
     background: var(--bg-primary);
     padding: calc(12px * var(--layout-scale));
+}
+
+/* Tabs do menu de configurações */
+.settings-tabs {
+    display: flex;
+    gap: 2px;
+    margin-bottom: 12px;
+    border-bottom: 3px solid var(--pixel-purple);
+    padding-bottom: 0;
+    flex-wrap: wrap;
+}
+
+.settings-tab {
+    background: #0a0a1a;
+    border: 2px solid #2222aa;
+    border-bottom: none;
+    padding: calc(6px * var(--layout-scale)) calc(10px * var(--layout-scale));
+    font-size: calc(11px * var(--font-scale));
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.15s;
+    box-shadow: 2px -1px 0px #000;
+    margin-bottom: -2px;
+    position: relative;
+    z-index: 1;
+}
+
+.settings-tab:hover {
+    border-color: var(--pixel-cyan);
+    color: var(--text-primary);
+}
+
+.settings-tab.active {
+    background: var(--bg-card);
+    border-color: var(--pixel-purple);
+    color: var(--pixel-gold);
+    z-index: 2;
+}
+
+.settings-tab-content {
+    display: none;
+}
+
+.settings-tab-content.active {
+    display: block;
+}
+
+.settings-modal .settings-modal-scroll {
+    max-height: 380px;
+    overflow-y: auto;
 }
 
 .settings-agent-card {

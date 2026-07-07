@@ -140,6 +140,22 @@ function updateAgentXP(key, pct) {
     if (fill) fill.style.width = `${Math.min(pct, 100)}%`;
 }
 
+function resetAgentProgress(key) {
+    const actionEl = document.getElementById(`action-${key}`);
+    if (actionEl) actionEl.textContent = '';
+    const progEl = document.getElementById(`prog-${key}`);
+    if (progEl) progEl.style.width = '0%';
+}
+
+function resetAllAgents() {
+    ['orchestrator', 'reporter', 'script', 'voice', 'designer', 'editor'].forEach(k => {
+        resetAgentProgress(k);
+        updateAgentStatus(k, 'idle', true);
+        const bubble = $(`bubble-${k}`);
+        if (bubble) { bubble.style.display = 'none'; }
+    });
+}
+
 function handleMessage(msg) {
     switch (msg.type) {
         case 'company_update':
@@ -165,6 +181,9 @@ function handleMessage(msg) {
         case 'agent_xp':
             updateAgentXP(msg.key, msg.pct);
             break;
+        case 'reset_all_agents':
+            resetAllAgents();
+            break;
         case 'agent_speaks':
             const speakKey = AGENT_KEYS[msg.role] || 'orchestrator';
             showBubble(speakKey, msg.text, msg.duration || 3000);
@@ -175,6 +194,7 @@ function handleMessage(msg) {
             $('companyStatus').textContent = '⚙️ Produzindo';
             $('companyStatus').style.color = '#fdcb6e';
             addLog('🚀 <span class="log-msg">Iniciando ciclo de produção...</span>', 'hire');
+            resetAllAgents();
             break;
         case 'stage_update':
             $('boardStatus').textContent = msg.stage;
@@ -186,26 +206,31 @@ function handleMessage(msg) {
             addLog(`📰 <span class="log-msg">${msg.count} notícias coletadas!</span>`, 'agent-reporter');
             showBubble('reporter', `${msg.count} notícias! 📰`, 3000);
             updateAgentStatus('reporter', 'idle', true);
+            resetAgentProgress('reporter');
             break;
         case 'script_created':
             addLog(`✍️ <span class="log-msg">Roteiro criado com ${msg.segments_count} segmentos!</span>`, 'agent-script');
             showBubble('script', 'Roteiro pronto! ✍️', 3000);
             updateAgentStatus('script', 'idle', true);
+            resetAgentProgress('script');
             break;
         case 'images_prepared':
             addLog(`🎨 <span class="log-msg">${msg.count} imagens preparadas!</span>`, 'agent-designer');
             showBubble('designer', 'Imagens prontas! 🎨', 3000);
             updateAgentStatus('designer', 'idle', true);
+            resetAgentProgress('designer');
             break;
         case 'audio_generated':
             addLog(`🎙️ <span class="log-msg">Narração gravada! ${msg.files_count} arquivos.</span>`, 'agent-voice');
             showBubble('voice', 'Gravação concluída! 🎙️', 3000);
             updateAgentStatus('voice', 'idle', true);
+            resetAgentProgress('voice');
             break;
         case 'video_complete':
             addLog(`🎬 <span class="log-msg">${msg.message}</span>`, 'agent-editor');
             showBubble('editor', 'Vídeo finalizado! 🎬', 4000);
             updateAgentStatus('editor', 'idle', true);
+            resetAgentProgress('editor');
             addMiniLog('✅ Vídeo produzido com sucesso!');
             if (msg.output_dir) {
                 const btn = document.createElement('button');
@@ -223,6 +248,7 @@ function handleMessage(msg) {
             $('btnProduce').textContent = '🎬 Iniciar Produção';
             $('companyStatus').textContent = '✅ Pronto';
             $('companyStatus').style.color = '#00b894';
+            resetAllAgents();
             break;
         case 'hire_request':
             showHireModal(msg.candidate);
@@ -346,10 +372,30 @@ function stopTestAudio() {
     }
 }
 
+const CATEGORY_OPTS = [
+    { value: 'Todas', label: '🌐 Todas as Categorias' },
+    { value: 'Tecnologia', label: '💻 Tecnologia' },
+    { value: 'Ciência', label: '🔬 Ciência' },
+    { value: 'Política', label: '🏛️ Política' },
+    { value: 'Economia', label: '📊 Economia' },
+    { value: 'Saúde', label: '🏥 Saúde' },
+    { value: 'Esportes', label: '⚽ Esportes' },
+    { value: 'Entretenimento', label: '🎬 Entretenimento' },
+    { value: 'Mundo', label: '🌍 Mundo' },
+];
+
+function switchSettingsTab(tabId) {
+    document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.settings-tab-content').forEach(c => c.classList.remove('active'));
+    document.querySelector(`.settings-tab[data-tab="${tabId}"]`).classList.add('active');
+    document.getElementById(`tab-${tabId}`).classList.add('active');
+}
+
 function renderSettings(schema, full) {
     const body = $('settingsBody');
     const meta = schema._meta || {};
     const newsCount = meta.news_count || 5;
+    const newsCategory = meta.news_category || 'Tecnologia';
     const rssFeeds = meta.rss_feeds || [];
     const apiKey = meta.openrouter_api_key || '';
     const availableModels = meta.available_models || [];
@@ -402,9 +448,24 @@ function renderSettings(schema, full) {
         : '<option value="">— sem modelos —</option>';
 
     const isLocal = (role) => schema[role] && schema[role].providers && schema[role].providers[0] === 'local';
+    const FREE_PREFS = {
+        'CEO / Coordenador': ['qwen/qwen3-next-80b-a3b-instruct:free', 'nvidia/nemotron-3-ultra-550b-a55b:free', 'google/gemma-4-31b-it:free'],
+        'Jornalista de Tecnologia': ['qwen/qwen3-next-80b-a3b-instruct:free', 'google/gemma-4-26b-a4b-it:free', 'nvidia/nemotron-3-nano-30b-a3b:free'],
+        'Roteirista Criativo': ['qwen/qwen3-next-80b-a3b-instruct:free', 'google/gemma-4-26b-a4b-it:free', 'nvidia/nemotron-3-ultra-550b-a55b:free'],
+        'Designer de Imagens': ['qwen/qwen3-next-80b-a3b-instruct:free', 'google/gemma-4-26b-a4b-it:free', 'nvidia/nemotron-3-nano-30b-a3b:free'],
+    };
+    const pickFreeModel = (role) => {
+        const prefs = FREE_PREFS[role] || ['qwen/qwen3-next-80b-a3b-instruct:free'];
+        for (const m of prefs) {
+            if (availableModels.includes(m)) return m;
+        }
+        return availableModels[0] || 'qwen/qwen3-next-80b-a3b-instruct:free';
+    };
     const getSavedModel = (role) => {
         const cfg = schema[role];
-        return (cfg && cfg.saved_model) || (cfg && cfg.default_model) || 'openai/gpt-4o-mini';
+        const saved = (cfg && cfg.saved_model) || (cfg && cfg.default_model) || '';
+        if (saved && availableModels.includes(saved)) return saved;
+        return pickFreeModel(role);
     };
 
     let agentCards = '';
@@ -502,134 +563,164 @@ function renderSettings(schema, full) {
         `<option value="${o.value}" ${curr === o.value ? 'selected' : ''}>${o.label}</option>`
     ).join('');
 
+    const catSel = (curr, opts) => opts.map(o =>
+        `<option value="${o.value}" ${curr === o.value ? 'selected' : ''}>${o.label}</option>`
+    ).join('');
+
     body.innerHTML = `
-        <div class="settings-section-title">🎨 Aparência</div>
-        <div class="settings-agent-card">
-            <div class="settings-row">
-                <label>Tema</label>
-                <select class="s-theme">${themeSel(curTheme, THEME_OPTS)}</select>
-            </div>
-            <div class="settings-row">
-                <label>Fonte</label>
-                <select class="s-font-scale">${themeSel(curFontScale, SCALE_OPTS)}</select>
-            </div>
-            <div class="settings-row">
-                <label>Layout</label>
-                <select class="s-layout-scale">${themeSel(curLayoutScale, SCALE_OPTS)}</select>
-            </div>
+        <div class="settings-tabs">
+            <button class="settings-tab active" data-tab="aparencia" onclick="switchSettingsTab('aparencia')">🎨 Aparência</button>
+            <button class="settings-tab" data-tab="api" onclick="switchSettingsTab('api')">🔑 API</button>
+            <button class="settings-tab" data-tab="fontes" onclick="switchSettingsTab('fontes')">📡 Fontes</button>
+            <button class="settings-tab" data-tab="video" onclick="switchSettingsTab('video')">🎬 Vídeo</button>
+            <button class="settings-tab" data-tab="audio" onclick="switchSettingsTab('audio')">🎵 Áudio</button>
+            <button class="settings-tab" data-tab="imagem" onclick="switchSettingsTab('imagem')">🖼️ Imagem</button>
+            <button class="settings-tab" data-tab="agentes" onclick="switchSettingsTab('agentes')">🤖 Agentes</button>
         </div>
 
-        <div class="settings-section-title">🔑 Chave da API</div>
-        <div class="settings-agent-card api-keys-card">
-            <div class="settings-row">
-                <label>OpenRouter</label>
-                <input class="s-apikey-openrouter" type="password" value="${apiKey}" placeholder="sk-or-v1-...">
-                <button class="btn-icon" style="padding:2px 6px;font-size:10px" onclick="this.previousElementSibling.type=this.previousElementSibling.type==='password'?'text':'password'">👁️</button>
-            </div>
-            <div style="margin-top:6px;display:flex;gap:6px">
-                <button class="btn-rss-add" onclick="fetchModels()">🔄 Buscar Modelos</button>
-                <span id="modelStatus" style="font-size:10px;color:var(--text-secondary);align-self:center">${availableModels.length ? `${availableModels.length} modelos disponíveis` : ''}</span>
-            </div>
-        </div>
-
-        <div class="settings-section-title">📡 Fontes e Notícias</div>
-        <div class="settings-agent-card" data-role="_meta">
-            <div class="settings-agent-header">
-                <span class="emoji">📰</span>
-                <div class="info"><strong>Notícias por Ciclo</strong><span>Quantidade de notícias a buscar</span></div>
-            </div>
-            <div class="settings-row">
-                <label>Notícias</label>
-                <input class="s-news-count" type="range" min="1" max="20" value="${newsCount}"
-                       oninput="document.getElementById('newsCountDisplay').textContent=this.value">
-                <span id="newsCountDisplay" style="min-width:24px;text-align:center;font-weight:700">${newsCount}</span>
-            </div>
-        </div>
-        <div class="settings-agent-card" data-role="_rss">
-            <div class="settings-agent-header">
-                <span class="emoji">📡</span>
-                <div class="info"><strong>Fontes RSS</strong><span>Feeds de notícias (adicione/remova)</span></div>
-            </div>
-            <div class="rss-list">
-                ${rssFeeds.map((url, i) => `
-                    <div class="rss-item">
-                        <span class="rss-url" title="${url}">${url}</span>
-                        <button class="rss-remove" onclick="removeRssFeed(${i})">✕</button>
+        <div class="settings-modal-scroll">
+            <!-- Aba: Aparência -->
+            <div class="settings-tab-content active" id="tab-aparencia">
+                <div class="settings-agent-card">
+                    <div class="settings-row">
+                        <label>Tema</label>
+                        <select class="s-theme">${themeSel(curTheme, THEME_OPTS)}</select>
                     </div>
-                `).join('')}
+                    <div class="settings-row">
+                        <label>Fonte</label>
+                        <select class="s-font-scale">${themeSel(curFontScale, SCALE_OPTS)}</select>
+                    </div>
+                    <div class="settings-row">
+                        <label>Layout</label>
+                        <select class="s-layout-scale">${themeSel(curLayoutScale, SCALE_OPTS)}</select>
+                    </div>
+                </div>
             </div>
-            <div class="rss-add-row">
-                <input class="rss-input" id="rssInput" placeholder="https://exemplo.com/feed" onkeydown="if(event.key==='Enter')addRssFeed()">
-                <button class="btn-rss-add" onclick="addRssFeed()">+ Adicionar</button>
+
+            <!-- Aba: API -->
+            <div class="settings-tab-content" id="tab-api">
+                <div class="settings-agent-card api-keys-card">
+                    <div class="settings-row">
+                        <label>OpenRouter</label>
+                        <input class="s-apikey-openrouter" type="password" value="${apiKey}" placeholder="sk-or-v1-...">
+                        <button class="btn-icon" style="padding:2px 6px;font-size:10px" onclick="this.previousElementSibling.type=this.previousElementSibling.type==='password'?'text':'password'">👁️</button>
+                    </div>
+                    <div style="margin-top:6px;display:flex;gap:6px">
+                        <button class="btn-rss-add" onclick="fetchModels()">🔄 Buscar Modelos</button>
+                        <span id="modelStatus" style="font-size:10px;color:var(--text-secondary);align-self:center">${availableModels.length ? `${availableModels.length} modelos disponíveis` : ''}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Aba: Fontes e Notícias -->
+            <div class="settings-tab-content" id="tab-fontes">
+                <div class="settings-agent-card" data-role="_meta">
+                    <div class="settings-row">
+                        <label>Categoria</label>
+                        <select class="s-news-category">${catSel(newsCategory, CATEGORY_OPTS)}</select>
+                    </div>
+                    <div class="settings-row">
+                        <label>Notícias</label>
+                        <input class="s-news-count" type="range" min="1" max="20" value="${newsCount}"
+                               oninput="document.getElementById('newsCountDisplay').textContent=this.value">
+                        <span id="newsCountDisplay" style="min-width:24px;text-align:center;font-weight:700">${newsCount}</span>
+                    </div>
+                </div>
+                <div class="settings-agent-card" data-role="_rss">
+                    <div class="settings-agent-header">
+                        <span class="emoji">📡</span>
+                        <div class="info"><strong>Fontes RSS</strong><span>Feeds de notícias</span></div>
+                    </div>
+                    <div class="rss-list">
+                        ${rssFeeds.map((url, i) => `
+                            <div class="rss-item">
+                                <span class="rss-url" title="${url}">${url}</span>
+                                <button class="rss-remove" onclick="removeRssFeed(${i})">✕</button>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div class="rss-add-row">
+                        <input class="rss-input" id="rssInput" placeholder="https://exemplo.com/feed" onkeydown="if(event.key==='Enter')addRssFeed()">
+                        <button class="btn-rss-add" onclick="addRssFeed()">+ Adicionar</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Aba: Vídeo -->
+            <div class="settings-tab-content" id="tab-video">
+                <div class="settings-agent-card">
+                    <div class="settings-row">
+                        <label>Resolução</label>
+                        <select class="s-vid-res">${RES_OPTS.map(r => `<option value="${r.w}x${r.h}" ${r.w === curRes.w && r.h === curRes.h ? 'selected' : ''}>${r.label}</option>`).join('')}</select>
+                    </div>
+                    <div class="settings-row">
+                        <label>FPS</label>
+                        <select class="s-vid-fps">${sel(video.fps || 30, FPS_OPTS)}</select>
+                    </div>
+                    <div class="settings-row">
+                        <label>Codec</label>
+                        <select class="s-vid-codec">${sel(video.codec || 'libx264', CODEC_OPTS)}</select>
+                    </div>
+                    <div class="settings-row">
+                        <label>Bitrate</label>
+                        <select class="s-vid-bitrate">${sel(video.bitrate || '5000k', AUDIO_BITRATES)}</select>
+                    </div>
+                    <div class="settings-row">
+                        <label>Formato</label>
+                        <select class="s-vid-format">${sel(video.format || 'mp4', VID_FORMATS)}</select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Aba: Áudio -->
+            <div class="settings-tab-content" id="tab-audio">
+                <div class="settings-agent-card">
+                    <div class="settings-row">
+                        <label>Taxa (Hz)</label>
+                        <select class="s-aud-samplerate">${sel(audio.sample_rate || 44100, SAMPLERATES)}</select>
+                    </div>
+                    <div class="settings-row">
+                        <label>Bitrate</label>
+                        <select class="s-aud-bitrate">${sel(audio.bitrate || '192k', AUDIO_BITRATES)}</select>
+                    </div>
+                    <div class="settings-row">
+                        <label>Codec</label>
+                        <select class="s-aud-codec">
+                            <option value="aac" ${(audio.codec||'aac')==='aac'?'selected':''}>AAC</option>
+                            <option value="mp3" ${audio.codec==='mp3'?'selected':''}>MP3</option>
+                            <option value="opus" ${audio.codec==='opus'?'selected':''}>Opus</option>
+                        </select>
+                    </div>
+                    <div class="settings-row">
+                        <label>Canais</label>
+                        <select class="s-aud-channels">
+                            <option value="1" ${(audio.channels||2)===1?'selected':''}>Mono</option>
+                            <option value="2" ${(audio.channels||2)===2?'selected':''}>Estéreo</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Aba: Imagem -->
+            <div class="settings-tab-content" id="tab-imagem">
+                <div class="settings-agent-card">
+                    <div class="settings-row">
+                        <label>Resolução</label>
+                        <select class="s-img-res">${RES_OPTS.map(r => `<option value="${r.w}x${r.h}" ${r.w === (image.width||1920) && r.h === (image.height||1080) ? 'selected' : ''}>${r.label}</option>`).join('')}</select>
+                    </div>
+                    <div class="settings-row">
+                        <label>Formato</label>
+                        <select class="s-img-format">${sel(image.format || 'jpg', IMG_FORMATS)}</select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Aba: Agentes -->
+            <div class="settings-tab-content" id="tab-agentes">
+                <p style="font-size:10px;color:var(--text-secondary);margin-bottom:8px">Selecione o modelo OpenRouter para cada agente. <strong>Salve as configurações</strong> após escolher.</p>
+                ${agentCards}
             </div>
         </div>
-
-        <div class="settings-section-title">🎬 Vídeo</div>
-        <div class="settings-agent-card">
-            <div class="settings-row">
-                <label>Resolução</label>
-                <select class="s-vid-res">${RES_OPTS.map(r => `<option value="${r.w}x${r.h}" ${r.w === curRes.w && r.h === curRes.h ? 'selected' : ''}>${r.label}</option>`).join('')}</select>
-            </div>
-            <div class="settings-row">
-                <label>FPS</label>
-                <select class="s-vid-fps">${sel(video.fps || 30, FPS_OPTS)}</select>
-            </div>
-            <div class="settings-row">
-                <label>Codec</label>
-                <select class="s-vid-codec">${sel(video.codec || 'libx264', CODEC_OPTS)}</select>
-            </div>
-            <div class="settings-row">
-                <label>Bitrate</label>
-                <select class="s-vid-bitrate">${sel(video.bitrate || '5000k', AUDIO_BITRATES)}</select>
-            </div>
-            <div class="settings-row">
-                <label>Formato</label>
-                <select class="s-vid-format">${sel(video.format || 'mp4', VID_FORMATS)}</select>
-            </div>
-        </div>
-
-        <div class="settings-section-title">🎵 Áudio</div>
-        <div class="settings-agent-card">
-            <div class="settings-row">
-                <label>Taxa (Hz)</label>
-                <select class="s-aud-samplerate">${sel(audio.sample_rate || 44100, SAMPLERATES)}</select>
-            </div>
-            <div class="settings-row">
-                <label>Bitrate</label>
-                <select class="s-aud-bitrate">${sel(audio.bitrate || '192k', AUDIO_BITRATES)}</select>
-            </div>
-            <div class="settings-row">
-                <label>Codec</label>
-                <select class="s-aud-codec">
-                    <option value="aac" ${(audio.codec||'aac')==='aac'?'selected':''}>AAC</option>
-                    <option value="mp3" ${audio.codec==='mp3'?'selected':''}>MP3</option>
-                    <option value="opus" ${audio.codec==='opus'?'selected':''}>Opus</option>
-                </select>
-            </div>
-            <div class="settings-row">
-                <label>Canais</label>
-                <select class="s-aud-channels">
-                    <option value="1" ${(audio.channels||2)===1?'selected':''}>Mono</option>
-                    <option value="2" ${(audio.channels||2)===2?'selected':''}>Estéreo</option>
-                </select>
-            </div>
-        </div>
-
-        <div class="settings-section-title">🖼️ Imagem</div>
-        <div class="settings-agent-card">
-            <div class="settings-row">
-                <label>Resolução</label>
-                <select class="s-img-res">${RES_OPTS.map(r => `<option value="${r.w}x${r.h}" ${r.w === (image.width||1920) && r.h === (image.height||1080) ? 'selected' : ''}>${r.label}</option>`).join('')}</select>
-            </div>
-            <div class="settings-row">
-                <label>Formato</label>
-                <select class="s-img-format">${sel(image.format || 'jpg', IMG_FORMATS)}</select>
-            </div>
-        </div>
-
-        <div class="settings-section-title">🤖 Agentes</div>
-        <p style="font-size:10px;color:var(--text-secondary);margin-bottom:8px">Selecione o modelo OpenRouter para cada agente. <strong>Salve as configurações</strong> após escolher.</p>
-        ${agentCards}
     `;
 
     document.querySelectorAll('.settings-agent-card[data-role]:not([data-role^="_"])').forEach(card => {
@@ -780,14 +871,20 @@ function saveSettings() {
         const role = card.dataset.role;
         if (role === '_meta') {
             const nc = parseInt(card.querySelector('.s-news-count')?.value) || 5;
+            const cat = card.querySelector('.s-news-category')?.value || 'Tecnologia';
             payload.news_count = nc;
-            tryAPI('update_agent_config', '_meta', { news_count: nc });
+            payload.news_category = cat;
+            tryAPI('update_agent_config', '_meta', { news_count: nc, news_category: cat });
         }
         if (role && !role.startsWith('_')) {
             const modelEl = card.querySelector('.s-model');
-            const model = modelEl ? modelEl.value : '';
+            let model = modelEl ? modelEl.value : '';
             const temp = parseFloat(card.querySelector('.s-temp')?.value) || 0.7;
             const isLocal = !modelEl || !model;
+            if (!isLocal && !model) {
+                model = pickFreeModel(role);
+                if (modelEl) modelEl.value = model;
+            }
             const cfg = isLocal ? { provider: 'local', model: 'moviepy' } : { model, temperature: temp, provider: 'openrouter' };
             card.querySelectorAll('[class^="s-"], [class*=" s-"]').forEach(el => {
                 const cls = el.className.split(' ').find(c => c.startsWith('s-')) || '';

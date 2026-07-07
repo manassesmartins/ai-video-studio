@@ -38,17 +38,18 @@ Responda em JSON:
         self._report("Metas definidas", 100)
         return result if isinstance(result, dict) else {"goal": "Produzir mais vídeos", "focus": "qualidade", "message": "Vamos nessa!"}
 
-    async def plan_production(self, raw_news: list, count: int, company_level: int, videos_produced: int) -> dict:
+    async def plan_production(self, raw_news: list, count: int, company_level: int, videos_produced: int, category: str = "Tecnologia") -> dict:
         self._report("Analisando notícias e planejando produção...", 10)
         news_list = "\n".join(
             f"{i+1}. [{n.get('source','')}] {n['title']}"
             for i, n in enumerate(raw_news[:15])
         )
         prompt = f"""Nível {company_level}, {videos_produced} vídeos.
+Categoria: {category}
 Notícias:
 {news_list}
 
-Selecione {count} melhores e dê instruções para cada agente.
+Selecione {count} melhores na categoria "{category}" e dê instruções para cada agente.
 Responda JSON:
 {{"goal":"...","focus":"...","message":"...","selected_indices":[1,2,3],"instructions":{{"Jornalista de Tecnologia":"...","Roteirista Criativo":"...","Designer de Imagens":"...","Artista de Voz":"...","Editor de Vídeo":"..."}}}}
 """

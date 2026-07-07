@@ -6,7 +6,7 @@ AGENT_PROVIDER_SCHEMA = {
         "emoji": "📰",
         "providers": ["openrouter"],
         "default_provider": "openrouter",
-        "default_model": "openai/gpt-4o-mini",
+        "default_model": "qwen/qwen3.5-flash:free",
         "actions": [
             {"name": "Buscar Notícias", "type": "rss"},
             {"name": "Resumir Artigos", "type": "chat"},
@@ -18,7 +18,7 @@ AGENT_PROVIDER_SCHEMA = {
         "emoji": "✍️",
         "providers": ["openrouter"],
         "default_provider": "openrouter",
-        "default_model": "openai/gpt-4o-mini",
+        "default_model": "qwen/qwen3-next-80b-a3b-instruct:free",
         "actions": [
             {"name": "Criar Roteiro", "type": "chat"},
             {"name": "Revisar Texto", "type": "chat"},
@@ -29,8 +29,8 @@ AGENT_PROVIDER_SCHEMA = {
         "label": "Locutor",
         "emoji": "🎙️",
         "providers": ["openrouter"],
-        "default_provider": "openrouter",
-        "default_model": "openai/tts-1",
+        "default_provider": "local",
+        "default_model": "edge-tts",
         "extra_fields": {
             "voice": {"label": "Voz", "type": "select", "options": ["pt-BR-FranciscaNeural|Francisca (Feminino)", "pt-BR-AntonioNeural|Antonio (Masculino)", "pt-BR-ThalitaMultilingualNeural|Thalita (Feminino)"], "default": "pt-BR-FranciscaNeural"},
             "intro_prompt": {"label": "Frase de abertura", "type": "text", "default": "Olá pessoal! Sejam bem-vindos ao nosso resumo de notícias de tecnologia. Vamos conferir as principais novidades do mundo tech hoje."},
@@ -46,7 +46,7 @@ AGENT_PROVIDER_SCHEMA = {
         "emoji": "🎨",
         "providers": ["openrouter"],
         "default_provider": "openrouter",
-        "default_model": "openai/gpt-4o-mini",
+        "default_model": "qwen/qwen3-next-80b-a3b-instruct:free",
         "extra_fields": {"image_gen_model": {"label": "Modelo p/ gerar imagens por IA", "options": [], "default": "nenhum"}},
         "actions": [
             {"name": "Buscar Imagens", "type": "search"},
@@ -70,7 +70,7 @@ AGENT_PROVIDER_SCHEMA = {
         "emoji": "👔",
         "providers": ["openrouter"],
         "default_provider": "openrouter",
-        "default_model": "openai/gpt-4o-mini",
+        "default_model": "qwen/qwen3-next-80b-a3b-instruct:free",
         "actions": [
             {"name": "Definir Metas", "type": "chat"},
             {"name": "Atribuir Tarefas", "type": "chat"},

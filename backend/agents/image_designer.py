@@ -137,36 +137,49 @@ REGRAS IMPORTANTES:
             image_desc = segment.get("image_desc", title)
             credit = segment.get("credit", "")
             filename = f"news_{i}.jpg"
-            local_path = ""
+            has_image = False
 
             news_item = news_items[i] if i < len(news_items) else {}
             article_images = news_item.get("article_images", [])
 
-            # 1. Usar imagem extraída do artigo
+            # 1. Usar TODAS as imagens extraídas do artigo
             if article_images:
-                src = article_images[0].get("local_path", "")
-                if src and os.path.exists(src):
-                    local_path = src
-                    credit = article_images[0].get("credit", credit)
-                    self.log_action(f"✅ Usando imagem do artigo: {src}")
+                for j, art_img in enumerate(article_images):
+                    src = art_img.get("local_path", "")
+                    if src and os.path.exists(src):
+                        prepared_images.append({
+                            "segment_index": i,
+                            "title": title,
+                            "local_path": src,
+                            "credit": art_img.get("credit", credit),
+                            "image_desc": image_desc
+                        })
+                        has_image = True
+                        self.log_action(f"✅ Usando imagem {j+1} do artigo: {src}")
 
-            # 2. Tentar gerar por IA
-            if not local_path:
+            # 2. Tentar gerar por IA (se nenhuma imagem do artigo)
+            if not has_image:
                 ai_path = await self.generate_ai_image(image_desc, filename)
                 if ai_path:
-                    local_path = ai_path
+                    prepared_images.append({
+                        "segment_index": i,
+                        "title": title,
+                        "local_path": ai_path,
+                        "credit": news_item.get("credit", credit),
+                        "image_desc": image_desc
+                    })
+                    has_image = True
 
             # 3. Fallback: placeholder
-            if not local_path:
+            if not has_image:
                 local_path = await self.generate_placeholder(image_desc, filename)
-
-            prepared_images.append({
-                "segment_index": i,
-                "title": title,
-                "local_path": local_path,
-                "credit": news_item.get("credit", credit),
-                "image_desc": image_desc
-            })
+                prepared_images.append({
+                    "segment_index": i,
+                    "title": title,
+                    "local_path": local_path,
+                    "credit": news_item.get("credit", credit),
+                    "image_desc": image_desc
+                })
 
         self.log_action(f"✅ {len(prepared_images)} imagens preparadas!")
         self.set_status("idle")

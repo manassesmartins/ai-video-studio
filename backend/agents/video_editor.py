@@ -106,34 +106,31 @@ exec {ffmpeg_bin} "${{ARGS[@]}}"
         output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "output", "videos")
         os.makedirs(output_dir, exist_ok=True)
 
-        output_path = os.path.join(output_dir, output_filename)
+        if not audio_file or not os.path.exists(audio_file):
+            self.log_action(f"Áudio não encontrado, tentando vídeo sem áudio")
+            audio_clip = None
+            audio_duration = 0
+        else:
+            try:
+                from moviepy import AudioFileClip
+                audio_clip = AudioFileClip(audio_file)
+                audio_duration = audio_clip.duration
+                self.log_action(f"Áudio carregado: {audio_duration:.1f}s")
+            except Exception as e:
+                self.log_action(f"Erro ao carregar áudio: {e}")
+                audio_clip = None
+                audio_duration = 0
 
-        if not os.path.exists(audio_file):
-            self.log_action(f"Arquivo de audio nao encontrado: {audio_file}")
+        valid_images = [img for img in images if img.get("local_path") and os.path.exists(img.get("local_path", ""))]
+        self.log_action(f"Usando {len(valid_images)} imagens")
+
+        if not valid_images and not audio_clip:
+            self.log_action("Sem áudio nem imagens para compor o vídeo")
             self.set_status("idle")
             return ""
 
-        valid_images = [img for img in images if img.get("local_path") and os.path.exists(img.get("local_path", ""))]
-        self.log_action(f"Usando {len(valid_images)} imagens e audio: {audio_file}")
-
-        await self.think(f"""
-O video final sera composto com:
-- Audio de narracao: {audio_file}
-- {len(valid_images)} imagens de noticias
-- Creditos inclusos
-
-Descreva brevemente como sera a composicao do video final.
-""")
-
         try:
-            from moviepy import (AudioFileClip, ImageClip, CompositeVideoClip, TextClip, concatenate_videoclips)
-
-            if audio_file and os.path.exists(audio_file):
-                audio_clip = AudioFileClip(audio_file)
-                audio_duration = audio_clip.duration
-            else:
-                audio_clip = None
-                audio_duration = max(len(valid_images), 1) * 5  # 5s por imagem sem áudio
+            from moviepy import (ImageClip, CompositeVideoClip, TextClip, concatenate_videoclips, ColorClip)
 
             v_fmt = (fmt or {}).get("video", {})
             a_fmt = (fmt or {}).get("audio", {})
@@ -151,72 +148,126 @@ Descreva brevemente como sera a composicao do video final.
             output_filename = f"video_{int(time.time())}.{vid_ext}"
             output_path = os.path.join(output_dir, output_filename)
 
-            img_duration = audio_duration / max(len(valid_images), 1)
-            clips = []
+            # Agrupar imagens por segmento e calcular tempos proporcionais
+            if segments and valid_images:
+                seg_images = {}
+                for img in valid_images:
+                    sidx = img.get("segment_index", 0)
+                    seg_images.setdefault(sidx, []).append(img)
 
-            for i, img_info in enumerate(valid_images):
-                img_path = img_info["local_path"]
-                credit = img_info.get("credit", "")
+                if not audio_duration:
+                    audio_duration = sum(max(len(s.get("narration", s.get("title", ""))), 1) for s in segments) * 0.15
+                total_chars = sum(len(s.get("narration", s.get("title", ""))) for s in segments)
+                duration_per_seg = []
+                for s in segments:
+                    chars = len(s.get("narration", s.get("title", "")))
+                    if total_chars > 0:
+                        duration_per_seg.append((chars / total_chars) * audio_duration)
+                    else:
+                        duration_per_seg.append(audio_duration / max(len(segments), 1))
 
-                img_clip = ImageClip(img_path).resized(width=img_w, height=img_h).with_duration(img_duration)
+                clips = []
+                current_time = 0.0
+                for sidx, seg in enumerate(segments):
+                    seg_dur = duration_per_seg[sidx] if sidx < len(duration_per_seg) else 0
+                    imgs = seg_images.get(sidx, [])
+                    if not imgs:
+                        current_time += seg_dur
+                        continue
+                    img_dur = seg_dur / max(len(imgs), 1)
+                    for j, img_info in enumerate(imgs):
+                        img_path = img_info["local_path"]
+                        credit = img_info.get("credit", "")
+                        title = img_info.get("title", "")
+                        t_start = current_time + j * img_dur
 
-                # Ken Burns: zoom lento
-                try:
-                    zoom = 1.0 + random.uniform(0.03, 0.12)
-                    img_clip = (img_clip
-                        .resized(lambda t: 1 + (zoom - 1) * t / max(img_duration, 0.01))
-                        .with_position(lambda t: (
-                            -((zoom - 1) * img_w * t / max(img_duration, 0.01)) / 2,
-                            -((zoom - 1) * img_h * t / max(img_duration, 0.01)) / 2
-                        )))
-                except Exception:
-                    pass
+                        img_clip = ImageClip(img_path).resized(width=img_w, height=img_h).with_start(t_start).with_duration(img_dur)
 
-                try:
-                    credit_txt = TextClip(
-                        text=credit,
-                        font_size=24,
-                        color="white",
-                        font="Arial",
-                        stroke_color="black",
-                        stroke_width=2,
-                        method="caption",
-                        size=(img_clip.w - 40, None)
-                    ).with_duration(img_duration).with_position(("center", "bottom"))
+                        try:
+                            zoom = 1.0 + random.uniform(0.03, 0.08)
+                            img_clip = (img_clip
+                                .resized(lambda t, z=zoom, d=img_dur: 1 + (z - 1) * t / max(d, 0.01))
+                                .with_position(lambda t, z=zoom, w=img_w, d=img_dur: (
+                                    -((z - 1) * w * t / max(d, 0.01)) / 2,
+                                    -((z - 1) * img_h * t / max(d, 0.01)) / 2
+                                )))
+                        except Exception:
+                            pass
 
-                    title_txt = TextClip(
-                        text=img_info.get("title", ""),
-                        font_size=32,
-                        color="white",
-                        font="Arial",
-                        stroke_color="black",
-                        stroke_width=2,
-                        method="caption",
-                        size=(img_clip.w - 40, None)
-                    ).with_duration(img_duration).with_position(("center", "top"))
+                        try:
+                            credit_txt = TextClip(
+                                text=credit, font_size=24, color="white", font="Arial",
+                                stroke_color="black", stroke_width=2, method="caption",
+                                size=(img_w - 40, None)
+                            ).with_start(t_start).with_duration(img_dur).with_position(("center", "bottom"))
 
-                    composite = CompositeVideoClip([
-                        img_clip,
-                        title_txt,
-                        credit_txt
-                    ], size=(img_w, img_h))
-                    clips.append(composite)
-                except Exception as e:
-                    self.log_action(f"Aviso: erro ao criar overlay para imagem {i}: {e}")
-                    clips.append(img_clip)
+                            title_txt = TextClip(
+                                text=title, font_size=32, color="white", font="Arial",
+                                stroke_color="black", stroke_width=2, method="caption",
+                                size=(img_w - 40, None)
+                            ).with_start(t_start).with_duration(img_dur).with_position(("center", "top"))
+
+                            composite = CompositeVideoClip([img_clip, title_txt, credit_txt], size=(img_w, img_h))
+                            clips.append(composite)
+                        except Exception as e:
+                            self.log_action(f"Aviso: overlay imagem {sidx}.{j}: {e}")
+                            clips.append(img_clip)
+                    current_time += seg_dur
+            else:
+                # Fallback: dividir tempo igualmente entre todas as imagens
+                if not audio_duration:
+                    audio_duration = max(len(valid_images), 1) * 5
+                img_duration = audio_duration / max(len(valid_images), 1)
+                clips = []
+                for i, img_info in enumerate(valid_images):
+                    img_path = img_info["local_path"]
+                    credit = img_info.get("credit", "")
+                    title = img_info.get("title", "")
+                    t_start = i * img_duration
+
+                    img_clip = ImageClip(img_path).resized(width=img_w, height=img_h).with_start(t_start).with_duration(img_duration)
+
+                    try:
+                        zoom = 1.0 + random.uniform(0.03, 0.08)
+                        img_clip = (img_clip
+                            .resized(lambda t, z=zoom, d=img_duration: 1 + (z - 1) * t / max(d, 0.01))
+                            .with_position(lambda t, z=zoom, w=img_w, d=img_duration: (
+                                -((z - 1) * w * t / max(d, 0.01)) / 2,
+                                -((z - 1) * img_h * t / max(d, 0.01)) / 2
+                            )))
+                    except Exception:
+                        pass
+
+                    try:
+                        credit_txt = TextClip(
+                            text=credit, font_size=24, color="white", font="Arial",
+                            stroke_color="black", stroke_width=2, method="caption",
+                            size=(img_w - 40, None)
+                        ).with_start(t_start).with_duration(img_duration).with_position(("center", "bottom"))
+
+                        title_txt = TextClip(
+                            text=title, font_size=32, color="white", font="Arial",
+                            stroke_color="black", stroke_width=2, method="caption",
+                            size=(img_w - 40, None)
+                        ).with_start(t_start).with_duration(img_duration).with_position(("center", "top"))
+
+                        composite = CompositeVideoClip([img_clip, title_txt, credit_txt], size=(img_w, img_h))
+                        clips.append(composite)
+                    except Exception as e:
+                        self.log_action(f"Aviso: overlay imagem {i}: {e}")
+                        clips.append(img_clip)
 
             if not clips:
-                from moviepy import ColorClip
-                bg = ColorClip(size=(vid_w, vid_h), color=(30, 30, 30), duration=audio_duration)
+                total_dur = audio_duration or 30
+                bg = ColorClip(size=(vid_w, vid_h), color=(30, 30, 30), duration=total_dur)
                 text_overlay = TextClip(
                     text="RESUMO DE NOTICIAS DE TECNOLOGIA",
                     font_size=60, color="white", font="Arial"
-                ).with_duration(audio_duration).with_position("center")
+                ).with_duration(total_dur).with_position("center")
                 clips = [CompositeVideoClip([bg, text_overlay], size=(1920, 1080))]
 
-            # Gera .srt com legendas
             if segments:
-                srt_path = self._create_srt(segments, audio_duration, output_path)
+                srt_path = self._create_srt(segments, audio_duration or 30, output_path)
                 if srt_path:
                     self.log_action(f"Legendas salvas: {srt_path}")
 
@@ -232,7 +283,7 @@ Descreva brevemente como sera a composicao do video final.
                 original_ffmpeg = fw.FFMPEG_BINARY
                 fw.FFMPEG_BINARY = wrapper
             else:
-                self.log_action(f"Renderizando video final ({gpu_codec})...")
+                self.log_action(f"Renderizando vídeo final...")
             try:
                 final.write_videofile(
                     output_path,
@@ -254,20 +305,22 @@ Descreva brevemente como sera a composicao do video final.
 
             if os.path.exists(output_path):
                 file_size = os.path.getsize(output_path) / (1024 * 1024)
-                self.log_action(f"VIDEO FINAL CRIADO: {output_filename} ({file_size:.1f} MB)")
+                self.log_action(f"VÍDEO FINAL CRIADO: {output_filename} ({file_size:.1f} MB)")
                 self.set_status("idle")
                 return output_path
             else:
-                self.log_action("Erro: video nao foi gerado")
+                self.log_action("Erro: vídeo não foi gerado")
                 self.set_status("idle")
                 return ""
 
         except ImportError as e:
-            self.log_action(f"Erro de importacao moviepy: {e}")
+            self.log_action(f"Erro de importação moviepy: {e}")
             self.set_status("idle")
             return ""
         except Exception as e:
-            self.log_action(f"Erro na edicao do video: {e}")
+            self.log_action(f"Erro na edição do vídeo: {e}")
+            import traceback
+            self.log_action(traceback.format_exc()[:300])
             self.set_status("idle")
             return ""
 
