@@ -77,6 +77,23 @@ AGENT_PROVIDER_SCHEMA = {
             {"name": "Avaliar Resultados", "type": "chat"},
         ]
     },
+    "YouTube Publisher": {
+        "label": "Publicador",
+        "emoji": "▶️",
+        "providers": ["openrouter"],
+        "default_provider": "openrouter",
+        "default_model": "qwen/qwen3-next-80b-a3b-instruct:free",
+        "extra_fields": {
+            "privacy": {"label": "Privacidade", "type": "select", "options": ["public|Público", "unlisted|Não listado", "private|Privado"], "default": "public"},
+            "auto_publish": {"label": "Publicar automaticamente", "type": "boolean", "default": False},
+            "channel_category": {"label": "Categoria do Vídeo", "type": "select", "options": ["22|Pessoas & Blogs", "25|Notícias & Política", "28|Ciência & Tecnologia", "24|Entretenimento", "27|Educação"], "default": "28"},
+        },
+        "actions": [
+            {"name": "Autenticar YouTube", "type": "auth"},
+            {"name": "Publicar Vídeo", "type": "upload"},
+            {"name": "Gerar Thumbnail", "type": "image"},
+        ]
+    },
 }
 
 

@@ -111,12 +111,14 @@ function checkBridge() {
 const AGENT_KEYS = {
     'Jornalista de Tecnologia': 'reporter', 'Roteirista Criativo': 'script',
     'Artista de Voz': 'voice', 'Designer de Imagens': 'designer',
-    'Editor de V\u00EDdeo': 'editor', 'CEO / Coordenador': 'orchestrator'
+    'Editor de V\u00EDdeo': 'editor', 'CEO / Coordenador': 'orchestrator',
+    'YouTube Publisher': 'youtube'
 };
 const NAME_TO_KEY = {
     'Repórter Tech': 'reporter', 'Roteirista': 'script',
     'Locutor': 'voice', 'Designer': 'designer',
-    'Editor': 'editor', 'Orquestrador': 'orchestrator'
+    'Editor': 'editor', 'Orquestrador': 'orchestrator',
+    'Publicador YouTube': 'youtube'
 };
 
 function $(id) { return document.getElementById(id); }
@@ -148,7 +150,7 @@ function resetAgentProgress(key) {
 }
 
 function resetAllAgents() {
-    ['orchestrator', 'reporter', 'script', 'voice', 'designer', 'editor'].forEach(k => {
+    ['orchestrator', 'reporter', 'script', 'voice', 'designer', 'editor', 'youtube'].forEach(k => {
         resetAgentProgress(k);
         updateAgentStatus(k, 'idle', true);
         const bubble = $(`bubble-${k}`);
@@ -157,6 +159,10 @@ function resetAllAgents() {
 }
 
 function handleMessage(msg) {
+    if (['youtube_publish_start', 'youtube_published', 'youtube_publish_error', 'youtube_auth_complete'].includes(msg.type)) {
+        handleYouTubeMessage(msg);
+        return;
+    }
     switch (msg.type) {
         case 'company_update':
             if (msg.level) company.level = msg.level;
@@ -372,6 +378,33 @@ function stopTestAudio() {
     }
 }
 
+function handleYouTubeMessage(msg) {
+    switch (msg.type) {
+        case 'youtube_publish_start':
+            addLog('▶️ <span class="log-msg">Publicando no YouTube...</span>', 'hire');
+            $('btnProduce').textContent = '⏳ Publicando...';
+            break;
+        case 'youtube_published':
+            addLog(`▶️ <strong>Vídeo publicado!</strong> <a href="${msg.url}" target="_blank" style="color:var(--green)">${msg.url}</a>`, 'hire');
+            addMiniLog('✅ Publicado no YouTube!');
+            $('btnProduce').disabled = false;
+            $('btnProduce').textContent = '🎬 Iniciar Produção';
+            break;
+        case 'youtube_publish_error':
+            addLog(`❌ <span class="log-msg">Erro ao publicar: ${msg.error}</span>`, 'error');
+            $('btnProduce').disabled = false;
+            $('btnProduce').textContent = '🎬 Iniciar Produção';
+            break;
+        case 'youtube_auth_complete':
+            if (msg.success) {
+                addLog('✅ <strong>YouTube autenticado com sucesso!</strong>', 'hire');
+            } else {
+                addLog('❌ <strong>Falha na autenticação do YouTube</strong>', 'error');
+            }
+            break;
+    }
+}
+
 const CATEGORY_OPTS = [
     { value: 'Todas', label: '🌐 Todas as Categorias' },
     { value: 'Tecnologia', label: '💻 Tecnologia' },
@@ -402,6 +435,20 @@ function renderSettings(schema, full) {
     const video = meta.video || {};
     const audio = meta.audio || {};
     const image = meta.image || {};
+
+    const YOUTUBE_PRIVACY = [
+        { value: 'public', label: '🌍 Público' },
+        { value: 'unlisted', label: '🔗 Não listado' },
+        { value: 'private', label: '🔒 Privado' },
+    ];
+
+    const YOUTUBE_CATEGORIES = [
+        { value: '22', label: '👥 Pessoas & Blogs' },
+        { value: '25', label: '📰 Notícias & Política' },
+        { value: '28', label: '🔬 Ciência & Tecnologia' },
+        { value: '24', label: '🎬 Entretenimento' },
+        { value: '27', label: '📚 Educação' },
+    ];
 
     const THEME_OPTS = [
         { value: 'default', label: '🎮 Retro Game' },
@@ -470,7 +517,8 @@ function renderSettings(schema, full) {
 
     let agentCards = '';
     const agentOrder = ['CEO / Coordenador', 'Jornalista de Tecnologia', 'Roteirista Criativo',
-                        'Artista de Voz', 'Designer de Imagens', 'Editor de Vídeo'];
+                        'Artista de Voz', 'Designer de Imagens', 'Editor de Vídeo',
+                        'YouTube Publisher'];
     agentOrder.forEach(role => {
         const cfg = schema[role];
         if (!cfg) return;
@@ -572,6 +620,7 @@ function renderSettings(schema, full) {
             <button class="settings-tab active" data-tab="aparencia" onclick="switchSettingsTab('aparencia')">🎨 Aparência</button>
             <button class="settings-tab" data-tab="api" onclick="switchSettingsTab('api')">🔑 API</button>
             <button class="settings-tab" data-tab="fontes" onclick="switchSettingsTab('fontes')">📡 Fontes</button>
+            <button class="settings-tab" data-tab="youtube" onclick="switchSettingsTab('youtube')">▶️ YouTube</button>
             <button class="settings-tab" data-tab="video" onclick="switchSettingsTab('video')">🎬 Vídeo</button>
             <button class="settings-tab" data-tab="audio" onclick="switchSettingsTab('audio')">🎵 Áudio</button>
             <button class="settings-tab" data-tab="imagem" onclick="switchSettingsTab('imagem')">🖼️ Imagem</button>
@@ -642,6 +691,48 @@ function renderSettings(schema, full) {
                     <div class="rss-add-row">
                         <input class="rss-input" id="rssInput" placeholder="https://exemplo.com/feed" onkeydown="if(event.key==='Enter')addRssFeed()">
                         <button class="btn-rss-add" onclick="addRssFeed()">+ Adicionar</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Aba: YouTube -->
+            <div class="settings-tab-content" id="tab-youtube">
+                <div class="settings-agent-card">
+                    <div class="settings-agent-header">
+                        <span class="emoji">▶️</span>
+                        <div class="info"><strong>YouTube</strong><span>Publicação automática de vídeos</span></div>
+                    </div>
+                    <div class="settings-row">
+                        <label>Autenticação</label>
+                        <span style="font-size:11px;color:var(--text-secondary)" id="ytAuthStatus">
+                            ${meta.youtube_authenticated ? '✅ Autenticado' : '❌ Não autenticado'}
+                        </span>
+                        <button class="btn-rss-add" onclick="authenticateYouTube()">
+                            ${meta.youtube_authenticated ? '🔄 Reautenticar' : '🔑 Autenticar'}
+                        </button>
+                    </div>
+                    <div class="settings-row">
+                        <label>Publicar automaticamente</label>
+                        <label class="switch">
+                            <input type="checkbox" class="s-yt-auto-publish" ${(meta.youtube?.auto_publish) ? 'checked' : ''}>
+                            <span class="switch-slider"></span>
+                        </label>
+                    </div>
+                    <div class="settings-row">
+                        <label>Privacidade</label>
+                        <select class="s-yt-privacy">${meta.youtube?.privacy ? YOUTUBE_PRIVACY.map(o =>
+                            `<option value="${o.value}" ${meta.youtube.privacy === o.value ? 'selected' : ''}>${o.label}</option>`
+                        ).join('') : YOUTUBE_PRIVACY.map(o => `<option value="${o.value}">${o.label}</option>`).join('')}</select>
+                    </div>
+                    <div class="settings-row">
+                        <label>Categoria</label>
+                        <select class="s-yt-category">${meta.youtube?.channel_category ? YOUTUBE_CATEGORIES.map(o =>
+                            `<option value="${o.value}" ${meta.youtube.channel_category === o.value ? 'selected' : ''}>${o.label}</option>`
+                        ).join('') : YOUTUBE_CATEGORIES.map(o => `<option value="${o.value}">${o.label}</option>`).join('')}</select>
+                    </div>
+                    <div class="settings-row">
+                        <label>Nome do canal</label>
+                        <input class="s-yt-channel-name" type="text" value="${meta.youtube?.channel_name || 'AI Studio'}" style="flex:1">
                     </div>
                 </div>
             </div>
@@ -752,6 +843,12 @@ function applyVisualSettings(theme, fontScale, layoutScale) {
     document.body.dataset.theme = theme;
     document.documentElement.style.setProperty('--font-scale', fontScale);
     document.documentElement.style.setProperty('--layout-scale', layoutScale);
+}
+
+function authenticateYouTube() {
+    const status = document.getElementById('ytAuthStatus');
+    if (status) status.textContent = '🔄 Autenticando...';
+    tryAPI('authenticate_youtube');
 }
 
 function fetchModels() {
@@ -920,6 +1017,17 @@ function saveSettings() {
         width: parseInt(iRes[0]), height: parseInt(iRes[1]),
         format: psVal('.s-img-format') || 'jpg',
     };
+
+    const ytAuto = document.querySelector('.s-yt-auto-publish');
+    const ytPrivacy = psVal('.s-yt-privacy') || 'public';
+    const ytCategory = psVal('.s-yt-category') || '28';
+    const ytChannelName = document.querySelector('.s-yt-channel-name')?.value || 'AI Studio';
+    tryAPI('set_youtube_config', {
+        auto_publish: ytAuto ? ytAuto.checked : false,
+        privacy: ytPrivacy,
+        channel_category: ytCategory,
+        channel_name: ytChannelName,
+    });
 
     tryAPI('update_settings_full', payload);
     $('settingsModal').classList.remove('show');

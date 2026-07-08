@@ -44,6 +44,12 @@ DEFAULT_SETTINGS = {
     "company_videos": 0,
     "company_revenue": 0,
     "company_quality": 30,
+    "youtube": {
+        "auto_publish": False,
+        "privacy": "public",
+        "channel_category": "28",
+        "channel_name": "AI Studio",
+    },
     "theme": "default",
     "font_scale": 1.0,
     "layout_scale": 1.0,

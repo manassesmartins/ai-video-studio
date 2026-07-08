@@ -22,6 +22,8 @@ from agents.script_writer import ScriptWriter
 from agents.voice_artist import VoiceArtist
 from agents.image_designer import ImageDesigner
 from agents.video_editor import VideoEditor
+from agents.youtube_publisher import YouTubePublisher
+from agents.thumbnail_generator import ThumbnailGenerator
 from agents.config import AGENT_PROVIDER_SCHEMA, default_config_for_role
 from settings_manager import SettingsManager
 from openrouter_client import fetch_models, pick_free_model_for_role
@@ -40,6 +42,7 @@ AGENT_KEY_MAP = {
     "Artista de Voz": "voice",
     "Designer de Imagens": "designer",
     "Editor de Vídeo": "editor",
+    "YouTube Publisher": "youtube",
 }
 
 AGENT_THINK_MSGS = [
@@ -358,6 +361,42 @@ class Company:
                     "output_dir": str(ROOT / "output" / "videos"),
                     "message": f"Vídeo #{self.videos} finalizado!" if video_path else "Erro na edição"})
                 self.api._broadcast({"type": "agent_xp", "key": "editor", "pct": 100})
+
+                # 7.5 Publicador YouTube: gera thumbnail e publica (se configurado)
+                youtube_cfg = self._settings.get("youtube", {})
+                auto_publish = youtube_cfg.get("auto_publish", False)
+                if video_path and self._hired_roles and auto_publish:
+                    try:
+                        pub = self.api._youtube_publisher
+                        thumb_gen = self.api._thumbnail_gen
+                        if pub.is_authenticated():
+                            self.api._broadcast({"type": "youtube_publish_start"})
+
+                            source_img = images[0]["local_path"] if images else None
+                            main_title = news_items[0].get("title", "Resumo de Notícias") if news_items else "Resumo"
+                            thumb_path = thumb_gen.generate(
+                                title=main_title[:70],
+                                source_image=source_img,
+                                channel_name=youtube_cfg.get("channel_name", "AI Studio"),
+                            )
+
+                            self.api._broadcast({"type": "stage_update",
+                                "stage": "▶️ Publicador YouTube: gerando metadados e enviando...",
+                                "agent": pub.name})
+                            result = asyncio.run(pub.publish(video_path, news_items, segments, "", thumb_path))
+                            if result.get("success"):
+                                self.api._broadcast({"type": "youtube_published",
+                                    "url": result["url"],
+                                    "video_id": result["video_id"],
+                                    "title": result["title"]})
+                                self.api._log(f"▶️ Vídeo publicado! {result['url']}", "hire")
+                            else:
+                                self.api._broadcast({"type": "youtube_publish_error",
+                                    "error": result.get("error", "Erro desconhecido")})
+                        else:
+                            self.api._log("▶️ YouTube não autenticado. Configure em Configurações > YouTube.", "error")
+                    except Exception as e:
+                        self.api._log(f"Erro na publicação: {e}", "error")
         except Exception as e:
             self.api._log(f"Erro ao editar vídeo: {e}", "error")
 
@@ -415,11 +454,15 @@ class Api:
             VoiceArtist(default_config_for_role("Artista de Voz")),
             ImageDesigner(default_config_for_role("Designer de Imagens")),
             VideoEditor(default_config_for_role("Editor de Vídeo")),
+            YouTubePublisher(default_config_for_role("YouTube Publisher")),
         ]
+        self._youtube_publisher = self._agents[-1]
+        self._thumbnail_gen = ThumbnailGenerator()
         self._company = Company(self, self._agents, self._settings)
 
         for a in self._agents:
             a.on_action = self._on_agent_action
+        self._thumbnail_gen.on_action(self._on_agent_action)
 
         self._apply_saved_agent_configs()
         self._propagate_api_key()
@@ -489,6 +532,14 @@ class Api:
     def get_agents_status(self):
         states = [a.get_state() for a in self._agents]
         states.append({
+            "name": "Publicador YouTube", "role": "YouTube Publisher",
+            "status": "idle",
+            "hired": True,
+            "current_action": "Pronto para publicar" if self._youtube_publisher.is_authenticated() else "Autentique nas configurações",
+            "action_progress": 0,
+            "config": {"provider": "openrouter", "model": self._settings.get("agent_configs", {}).get("YouTube Publisher", {}).get("model", "qwen/qwen3-next-80b-a3b-instruct:free")}
+        })
+        states.append({
             "name": "Orquestrador", "role": "CEO / Coordenador",
             "status": "working" if self._company._producing else "idle",
             "hired": "CEO / Coordenador" in self._company._hired_roles,
@@ -521,6 +572,8 @@ class Api:
             "rss_feeds": list(self._company._rss_feeds),
             "openrouter_api_key": stg.get("openrouter_api_key", ""),
             "available_models": [m["id"] for m in cached],
+            "youtube": dict(stg.get("youtube", {})),
+            "youtube_authenticated": self._youtube_publisher.is_authenticated(),
             "video": dict(stg.get("video", {})),
             "audio": dict(stg.get("audio", {})),
             "image": dict(stg.get("image", {})),
@@ -555,6 +608,9 @@ class Api:
         if "openrouter_api_key" in payload:
             self._settings.set("openrouter_api_key", payload["openrouter_api_key"])
             self._propagate_api_key()
+        if "youtube" in payload:
+            for sub, val in payload["youtube"].items():
+                self._settings.update("youtube", sub, val)
         for key in ["video", "audio", "image"]:
             if key in payload:
                 for sub, val in payload[key].items():
@@ -641,6 +697,51 @@ class Api:
             subprocess.Popen(["xdg-open", path])
         except Exception:
             pass
+
+    def get_youtube_status(self):
+        pub = self._youtube_publisher
+        cfg = self._settings.get("youtube", {})
+        return {
+            "authenticated": pub.is_authenticated(),
+            "ready": pub.is_ready(),
+            "auto_publish": cfg.get("auto_publish", False),
+            "privacy": cfg.get("privacy", "public"),
+            "channel_category": cfg.get("channel_category", "28"),
+            "channel_name": cfg.get("channel_name", "AI Studio"),
+        }
+
+    def authenticate_youtube(self):
+        import threading
+        threading.Thread(target=self._do_youtube_auth, daemon=True).start()
+        return True
+
+    def _do_youtube_auth(self):
+        import asyncio
+        try:
+            result = asyncio.run(self._youtube_publisher.authenticate())
+            if result:
+                self._log("✅ YouTube autenticado com sucesso!", "hire")
+                self._broadcast({"type": "youtube_auth_complete", "success": True})
+            else:
+                self._log("❌ Falha na autenticação do YouTube", "error")
+                self._broadcast({"type": "youtube_auth_complete", "success": False})
+        except Exception as e:
+            self._log(f"❌ Erro na autenticação: {e}", "error")
+            self._broadcast({"type": "youtube_auth_complete", "success": False})
+
+    def set_youtube_config(self, data: dict):
+        cfg = self._settings.get("youtube", {})
+        for key in ["auto_publish", "privacy", "channel_category", "channel_name"]:
+            if key in data:
+                cfg[key] = data[key]
+                self._settings.set("youtube", cfg)
+        sub = self._youtube_publisher.config
+        if "privacy" in data:
+            sub["privacy"] = data["privacy"]
+        if "api_key" in data:
+            sub["api_key"] = data["api_key"]
+        self._log("⚙️ Configuração do YouTube atualizada", "hire")
+        return True
 
     def test_voice(self, data: dict):
         text = data.get("text", "Olá, esta é a nova voz do seu narrador.")
